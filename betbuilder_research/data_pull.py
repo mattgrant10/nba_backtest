@@ -4,22 +4,6 @@ from pathlib import Path
 import sys
 import pandas as pd
 
-# Path to the big Excel master file
-INPUT_PATH = Path(
-    "/Users/matthewraymondandrewgrant/PycharmProjects/"
-    "nba_backtest/betbuilder_research/data/raw/PlayerStatistics1.xlsx"
-)
-
-# Year range you want
-YEAR_START = 2018
-YEAR_END = 2025  # inclusive
-
-# Output CSV
-OUTPUT_PATH = Path(
-    f"/Users/matthewraymondandrewgrant/PycharmProjects/"
-    f"nba_backtest/betbuilder_research/data/raw/PlayerStatistics_{YEAR_START}_{YEAR_END}.csv"
-)
-
 # Prefer this name if present
 PREFERRED_DATE_COL = "gameDate"
 
@@ -50,14 +34,18 @@ def find_date_column(df: pd.DataFrame) -> str:
         if "date" in low:
             return col
 
-    raise KeyError(
-        f"Could not find a date column. Available columns:\n{cols}"
-    )
+    raise KeyError(f"Could not find a date column. Available columns:\n{cols}")
 
 
-def filter_by_year_range(year_start: int, year_end: int) -> None:
-    print(f"[INFO] Loading Excel: {INPUT_PATH}")
-    df = pd.read_excel(INPUT_PATH, engine="openpyxl")
+def filter_by_year_range(
+    year_start: int, year_end: int, input_path: Path, output_path: Path
+) -> None:
+    if year_end < year_start:
+        raise ValueError("year_end must be >= year_start")
+    if output_path.exists():
+        raise FileExistsError(output_path)
+    print(f"[INFO] Loading Excel: {input_path}")
+    df = pd.read_excel(input_path, engine="openpyxl")
     print(f"[INFO] Loaded {len(df):,} rows × {len(df.columns)} columns")
 
     print("[INFO] Columns:", list(df.columns))
@@ -81,13 +69,23 @@ def filter_by_year_range(year_start: int, year_end: int) -> None:
     print(f"[INFO] Kept {len(filtered):,} rows")
 
     # Save to CSV
-    filtered.to_csv(OUTPUT_PATH, index=False)
-    print(f"[DONE] wrote {len(filtered):,} rows to {OUTPUT_PATH}")
+    filtered.to_csv(output_path, index=False)
+    print(f"[DONE] wrote {len(filtered):,} rows to {output_path}")
 
 
 if __name__ == "__main__":
     try:
-        filter_by_year_range(YEAR_START, YEAR_END)
+        import argparse
+
+        parser = argparse.ArgumentParser(
+            description="Optional Excel calendar-year extraction; not required for the CSV workflow"
+        )
+        parser.add_argument("--input", type=Path, required=True)
+        parser.add_argument("--output", type=Path, required=True)
+        parser.add_argument("--year-start", type=int, required=True)
+        parser.add_argument("--year-end", type=int, required=True)
+        args = parser.parse_args()
+        filter_by_year_range(args.year_start, args.year_end, args.input, args.output)
     except Exception as e:
         print("[ERROR]", e, file=sys.stderr)
         raise

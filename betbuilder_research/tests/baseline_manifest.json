@@ -1,0 +1,258 @@
+{
+  "input_sha256": "b38081c069f669e8e3d825ad92e211d7708482536d21f2405374f0d8309d7bc5",
+  "preservation_commit": "a85daa35b3650d3a41230d46f09976a106bb9110",
+  "tables": {
+    "cleaned": {
+      "rows": 18346,
+      "columns": 63,
+      "file": "cleaned.csv",
+      "sha256": "5de8f3823fa0df1b9e5d80a03366f470a25e661271994f93359ac3c4a99aa076"
+    },
+    "players": {
+      "rows": 447,
+      "columns": 20,
+      "file": "players.csv",
+      "sha256": "7edae58ef1a018fc99d206b7e6eaa67a7797c02fabb418f58a6b1415b03dab4c"
+    },
+    "teams": {
+      "rows": 34,
+      "columns": 14,
+      "file": "teams.csv",
+      "sha256": "af59dbbc1ac69f484b54a02c66dafa40f3be9b89a1388539e4331b8f20b8fba7"
+    },
+    "props": {
+      "rows": 447,
+      "columns": 29,
+      "file": "props.csv",
+      "sha256": "b31e318bbf17f43ec9bb0fd4e0a30e454e5e1a5a5981510da1cb97714d8a8606"
+    },
+    "hit_rates__all_players": {
+      "rows": 447,
+      "columns": 18,
+      "file": "hit_rates__all_players.csv",
+      "sha256": "4b0da2ba3dc5dd332147ed484f99620959a1126c5a662919b77cc739e081fb4d"
+    },
+    "hit_rates__by_team__Atlanta Hawks": {
+      "rows": 12,
+      "columns": 18,
+      "file": "hit_rates__by_team__Atlanta Hawks.csv",
+      "sha256": "f23b50f99b136634e462c5ab9791bba3bd9eaaa2a5a13583e9940277897cf6a6"
+    },
+    "hit_rates__by_team__Boston Celtics": {
+      "rows": 15,
+      "columns": 18,
+      "file": "hit_rates__by_team__Boston Celtics.csv",
+      "sha256": "155abe1d90369b9813817c8db64e159951ab055dc556fc7b5e366ba024b3ba72"
+    },
+    "hit_rates__by_team__Brooklyn Nets": {
+      "rows": 14,
+      "columns": 18,
+      "file": "hit_rates__by_team__Brooklyn Nets.csv",
+      "sha256": "ad0dff6b4d9aaf176239b33918bc48e6f89ff0e82aa6338f53e1bb1a11c57e04"
+    },
+    "hit_rates__by_team__Charlotte Hornets": {
+      "rows": 17,
+      "columns": 18,
+      "file": "hit_rates__by_team__Charlotte Hornets.csv",
+      "sha256": "2ea44ba066cba52e53c3c843d80872759fd7fb797d97e03c14b25408ee8df1a2"
+    },
+    "hit_rates__by_team__Chicago Bulls": {
+      "rows": 15,
+      "columns": 18,
+      "file": "hit_rates__by_team__Chicago Bulls.csv",
+      "sha256": "b7c19a02fb12423ce05213a8cd02eccf6f9662aa016a0d0bbf3ca7a943f8b3c0"
+    },
+    "hit_rates__by_team__Cleveland Cavaliers": {
+      "rows": 15,
+      "columns": 18,
+      "file": "hit_rates__by_team__Cleveland Cavaliers.csv",
+      "sha256": "74d4e81fc43f776bbf5d32e5d30323d897014f62520a14c94181fa7df48764db"
+    },
+    "hit_rates__by_team__Dallas Mavericks": {
+      "rows": 16,
+      "columns": 18,
+      "file": "hit_rates__by_team__Dallas Mavericks.csv",
+      "sha256": "dcdcf6d6e5a8a5a7c7eb471f0725545c2334a0d5c4a9d0866fd6dbdc03bccdde"
+    },
+    "hit_rates__by_team__Denver Nuggets": {
+      "rows": 15,
+      "columns": 18,
+      "file": "hit_rates__by_team__Denver Nuggets.csv",
+      "sha256": "eeab8acc9dc67dc96f4450618cccce19b770d19e54638bc87adb0af151014488"
+    },
+    "hit_rates__by_team__Detroit Pistons": {
+      "rows": 14,
+      "columns": 18,
+      "file": "hit_rates__by_team__Detroit Pistons.csv",
+      "sha256": "77da1b435a01229dbc02237fcc97012d2f87978c1022216abe2d9ebc1f2a78e5"
+    },
+    "hit_rates__by_team__Golden State Warriors": {
+      "rows": 15,
+      "columns": 18,
+      "file": "hit_rates__by_team__Golden State Warriors.csv",
+      "sha256": "728f0a45e5715aef33c4609a158d99bada88112d5fe293e36044e9ebe644d99a"
+    },
+    "hit_rates__by_team__Houston Rockets": {
+      "rows": 14,
+      "columns": 18,
+      "file": "hit_rates__by_team__Houston Rockets.csv",
+      "sha256": "a5a680cc22ffb8e30615a1073a6bbc5617bc8d9c73690bf4e1d4a4a7cd5a9f3d"
+    },
+    "hit_rates__by_team__Indiana Pacers": {
+      "rows": 19,
+      "columns": 18,
+      "file": "hit_rates__by_team__Indiana Pacers.csv",
+      "sha256": "21f1e7cff44fc243ab39e8900e09366d9eadfaa840dbf457c8473b1d28ad50a5"
+    },
+    "hit_rates__by_team__LA Clippers": {
+      "rows": 15,
+      "columns": 18,
+      "file": "hit_rates__by_team__LA Clippers.csv",
+      "sha256": "7e788908f66d714449909161d47225aae1886a23fe2ecdd4d8f6cb2892395ddb"
+    },
+    "hit_rates__by_team__Los Angeles Lakers": {
+      "rows": 15,
+      "columns": 18,
+      "file": "hit_rates__by_team__Los Angeles Lakers.csv",
+      "sha256": "90e3c6b66f7f63ff5f04a14a66fb8b93c282ab626c036ac442cf243f1891d45e"
+    },
+    "hit_rates__by_team__Memphis Grizzlies": {
+      "rows": 15,
+      "columns": 18,
+      "file": "hit_rates__by_team__Memphis Grizzlies.csv",
+      "sha256": "24e7ba12dfee525f487677564bcc7defd1c7c2894ee83cef0b79c9c3ec359fa6"
+    },
+    "hit_rates__by_team__Miami Heat": {
+      "rows": 15,
+      "columns": 18,
+      "file": "hit_rates__by_team__Miami Heat.csv",
+      "sha256": "9210a477030026aa94288a36cb2ec6e49be0afadfb4a83805b3827304d09eb24"
+    },
+    "hit_rates__by_team__Milwaukee Bucks": {
+      "rows": 15,
+      "columns": 18,
+      "file": "hit_rates__by_team__Milwaukee Bucks.csv",
+      "sha256": "dbf12c2442c1284816ba78ecb87d303e8603f079e23f1a0a7f6108029b479d12"
+    },
+    "hit_rates__by_team__Minnesota Timberwolves": {
+      "rows": 14,
+      "columns": 18,
+      "file": "hit_rates__by_team__Minnesota Timberwolves.csv",
+      "sha256": "9ecb387bd6d6020ec8149556204910751fe24a2e528503109330713f32ee15db"
+    },
+    "hit_rates__by_team__New Orleans Pelicans": {
+      "rows": 14,
+      "columns": 18,
+      "file": "hit_rates__by_team__New Orleans Pelicans.csv",
+      "sha256": "78bf9131494128568a963d53a5f7bd4ba06ada4765bcc208015661a0dfc763c4"
+    },
+    "hit_rates__by_team__New York Knicks": {
+      "rows": 14,
+      "columns": 18,
+      "file": "hit_rates__by_team__New York Knicks.csv",
+      "sha256": "d4bb56b34c716e56486ccb30689421a55fa1c0b7b99a19e48f50f0e9a0582916"
+    },
+    "hit_rates__by_team__Oklahoma City Thunder": {
+      "rows": 16,
+      "columns": 18,
+      "file": "hit_rates__by_team__Oklahoma City Thunder.csv",
+      "sha256": "7848f4d2d61ad50414f068dd4e896ec478803997aaa9f4c6e843ec1ee0a3dcc4"
+    },
+    "hit_rates__by_team__Orlando Magic": {
+      "rows": 15,
+      "columns": 18,
+      "file": "hit_rates__by_team__Orlando Magic.csv",
+      "sha256": "ba0f91ed5d4ad0d7f2cfbf43e3c501768056533e09aedf25f69bc5c4a3a23fcc"
+    },
+    "hit_rates__by_team__Philadelphia 76ers": {
+      "rows": 13,
+      "columns": 18,
+      "file": "hit_rates__by_team__Philadelphia 76ers.csv",
+      "sha256": "3a3dd47ccb9cd69ce60d81d9f3f2f0c66828e329434cbfbb4c6560beea1ea68b"
+    },
+    "hit_rates__by_team__Phoenix Suns": {
+      "rows": 15,
+      "columns": 18,
+      "file": "hit_rates__by_team__Phoenix Suns.csv",
+      "sha256": "16318e6836201ee11a6ca5e7be2cf435c002d7fcd146281958e73292b0e1e52e"
+    },
+    "hit_rates__by_team__Portland Trail Blazers": {
+      "rows": 14,
+      "columns": 18,
+      "file": "hit_rates__by_team__Portland Trail Blazers.csv",
+      "sha256": "05a31192527ee9de2ea0720860476b1eaffb80d3dbf3efc2a95ac0af4793c151"
+    },
+    "hit_rates__by_team__Sacramento Kings": {
+      "rows": 15,
+      "columns": 18,
+      "file": "hit_rates__by_team__Sacramento Kings.csv",
+      "sha256": "0eed3deddebc9a5a918f8fdef5c6f652400a0a8cf2c2820dec516710074438e8"
+    },
+    "hit_rates__by_team__San Antonio Spurs": {
+      "rows": 15,
+      "columns": 18,
+      "file": "hit_rates__by_team__San Antonio Spurs.csv",
+      "sha256": "a94ab9374868d248ec396eb5a0a90fa0250cc81914f1dd60fccaa309b1bd1e06"
+    },
+    "hit_rates__by_team__Toronto Raptors": {
+      "rows": 15,
+      "columns": 18,
+      "file": "hit_rates__by_team__Toronto Raptors.csv",
+      "sha256": "34d80505b55c95aaae849db60c529f11bbb2240293d335af2bb8fd35af5b91b0"
+    },
+    "hit_rates__by_team__Utah Jazz": {
+      "rows": 13,
+      "columns": 18,
+      "file": "hit_rates__by_team__Utah Jazz.csv",
+      "sha256": "7e8370a4f161ec8d2ab5581935388f04aab7e2bd96724f12c39f711b01e8ad18"
+    },
+    "hit_rates__by_team__Washington Wizards": {
+      "rows": 18,
+      "columns": 18,
+      "file": "hit_rates__by_team__Washington Wizards.csv",
+      "sha256": "30b52db2248f92a1eb197db764f8617258be9921c7b647da53a89cce3e7a3c8d"
+    },
+    "hit_rates__summary": {
+      "rows": 3,
+      "columns": 9,
+      "file": "hit_rates__summary.csv",
+      "sha256": "a25821e733d03d9152135c10a1502f1bb74677e1c3b1fd997bc8fd58e0ac7441"
+    },
+    "acca_daily": {
+      "rows": 131,
+      "columns": 11,
+      "file": "acca_daily.csv",
+      "sha256": "76a743f4b5ea86824d9b93f5a05ca2ca9e93e33a0770bf508eb90c54ce4c0a4c"
+    },
+    "acca_props": {
+      "rows": 481,
+      "columns": 9,
+      "file": "acca_props.csv",
+      "sha256": "a75713e94df74458ec4623cb8c17d0c2f047649a6c5eb74e52b4210ac5120811"
+    },
+    "distributions": {
+      "rows": 44,
+      "columns": 14,
+      "file": "distributions.csv",
+      "sha256": "fa3cf75aff03b02f46858d041c4fbad0ac1415fa3225aa2953fd2ce7055db9d3"
+    },
+    "entropy": {
+      "rows": 44,
+      "columns": 6,
+      "file": "entropy.csv",
+      "sha256": "cfcca5723423716919077706f82f911810ab2656627d17bc32a0bd3d29883d0b"
+    },
+    "mutual_information": {
+      "rows": 44,
+      "columns": 44,
+      "file": "mutual_information.csv",
+      "sha256": "a62c40e6a1af4bba5d7aae588e6f962e7c40e8e86fb003f39ccdfea110717d99"
+    },
+    "copula": {
+      "rows": 28,
+      "columns": 11,
+      "file": "copula.csv",
+      "sha256": "1851ab05d22d0875821f5f844992f507bf7bbfbd54c571b5337058a4a142df8f"
+    }
+  }
+}

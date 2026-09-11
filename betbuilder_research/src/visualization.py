@@ -16,11 +16,6 @@ from .config import get_logger
 
 logger = get_logger(__name__)
 
-# Set visualization style
-sns.set_style("whitegrid")
-plt.rcParams['figure.figsize'] = (12, 8)
-plt.rcParams['font.size'] = 10
-
 _TITLE_SUFFIX = ""
 
 
@@ -571,7 +566,8 @@ def plot_distributions(
         logger.info(f"\n✓ Saved distribution plot to {save_path}")
 
     if show:
-        plt.show()
+        from nba_research.plotting import show_figures
+        show_figures()
     else:
         plt.close()
 
@@ -636,7 +632,8 @@ def plot_correlation_matrix(
         logger.info(f"Saved correlation plot to {save_path}")
 
     if show:
-        plt.show()
+        from nba_research.plotting import show_figures
+        show_figures()
     else:
         plt.close()
 
@@ -720,7 +717,8 @@ def plot_boxplots(
         logger.info(f"Saved boxplot to {save_path}")
 
     if show:
-        plt.show()
+        from nba_research.plotting import show_figures
+        show_figures()
     else:
         plt.close()
 
@@ -774,7 +772,8 @@ def plot_value_counts(
         logger.info(f"Saved value counts plot to {save_path}")
 
     if show:
-        plt.show()
+        from nba_research.plotting import show_figures
+        show_figures()
     else:
         plt.close()
 
@@ -842,7 +841,8 @@ def plot_time_series(
         logger.info(f"Saved time series plot to {save_path}")
 
     if show:
-        plt.show()
+        from nba_research.plotting import show_figures
+        show_figures()
     else:
         plt.close()
 
@@ -904,7 +904,8 @@ def plot_roc_and_calibration(
         logger.info(f"Saved ROC/calibration plot to {save_path}")
 
     if show:
-        plt.show()
+        from nba_research.plotting import show_figures
+        show_figures()
     else:
         plt.close()
 
@@ -958,7 +959,8 @@ def plot_feature_importance(
         logger.info(f"Saved feature importance plot to {save_path}")
 
     if show:
-        plt.show()
+        from nba_research.plotting import show_figures
+        show_figures()
     else:
         plt.close()
 
@@ -1033,6 +1035,7 @@ def plot_cumulative_profit(
         logger.info(f"Saved cumulative profit plot to {save_path}")
 
     if show:
-        plt.show()
+        from nba_research.plotting import show_figures
+        show_figures()
     else:
         plt.close()

@@ -60,3 +60,14 @@ htmlcov/
 # Environment variables
 .env
 .env.local
+
+# Local preservation evidence and research outputs
+.local_preservation/
+output/
+models_artifacts/
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+*.xlsx
+*.xls

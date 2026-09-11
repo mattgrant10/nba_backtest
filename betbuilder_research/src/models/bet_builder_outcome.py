@@ -51,7 +51,11 @@ def train_builder_hit_model(
         Tuple of (fitted pipeline, metrics dict)
     """
     feature_cols = feature_cols or default_feature_columns()
-    random_state = random_state or model_config.random_state
+    forbidden = {"mean_abs_edge", "max_abs_edge", "realised", "realised_minus_line", "realised_pct_diff", "leg_hit", label_col}
+    leaked = forbidden.intersection(feature_cols)
+    if leaked:
+        raise ValueError(f"Outcome-derived predictors are not admissible: {sorted(leaked)}. Supply reviewed pre-game features explicitly.")
+    random_state = model_config.random_state if random_state is None else random_state
 
     logger.info(f"Training builder hit model with {len(feature_cols)} features")
 

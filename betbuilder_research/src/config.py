@@ -17,11 +17,6 @@ MODELS_DIR = PROJECT_ROOT / "models_artifacts"
 OUTPUT_DIR = PROCESSED_DATA_DIR
 FIGURES_DIR = PROJECT_ROOT / "output" / "figures"
 
-# Ensure directories exist
-for dir_path in [DATA_DIR, RAW_DATA_DIR, PROCESSED_DATA_DIR, MODELS_DIR, FIGURES_DIR]:
-    dir_path.mkdir(parents=True, exist_ok=True)
-
-
 @dataclass
 class BacktestConfig:
     """Configuration for backtesting parameters."""

@@ -115,6 +115,9 @@ def load_player_game_logs(path: Optional[Path] = None) -> pd.DataFrame:
     if path is None:
         path = RAW_DATA_DIR / "player_game_logs.csv"
 
+    if not path.exists() and path != RAW_DATA_DIR / "player_game_logs.csv":
+        raise DataLoadError(f"Explicit input file not found: {path}")
+
     # Try loading the standard file first
     if path.exists():
         required_columns = [
@@ -198,12 +201,13 @@ def _load_player_statistics_file() -> pd.DataFrame:
 def load_prop_lines(
     path: Optional[Path] = None,
     player_games: Optional[pd.DataFrame] = None,
-    learned_model_path: Optional[Path] = None
+    learned_model_path: Optional[Path] = None,
+    *, allow_synthetic: bool = False,
 ) -> pd.DataFrame:
     """
     Load player prop lines.
 
-    If the file doesn't exist, generates synthetic prop lines from player game data.
+    Missing files fail by default. Synthetic generation requires allow_synthetic=True.
     If a learned model path is provided, uses the trained model to generate lines.
 
     Expected columns:
@@ -239,7 +243,9 @@ def load_prop_lines(
         model = LearnedLineGenerator.load(learned_model_path)
         df = model.generate_lines(player_games)
     else:
-        logger.info("Prop lines file not found, generating synthetic data...")
+        if not allow_synthetic:
+            raise DataLoadError(f"Real prop lines required: {path}; synthetic generation is disabled")
+        logger.warning("EXPLICIT SYNTHETIC DEMO: generating prop lines")
         if player_games is None:
             player_games = load_player_game_logs()
         df = _generate_synthetic_prop_lines(player_games)
@@ -344,12 +350,13 @@ def _generate_synthetic_prop_lines(player_games: pd.DataFrame) -> pd.DataFrame:
 def load_bet_builder_legs(
     path: Optional[Path] = None,
     prop_lines: Optional[pd.DataFrame] = None,
-    player_games: Optional[pd.DataFrame] = None
+    player_games: Optional[pd.DataFrame] = None,
+    *, allow_synthetic: bool = False,
 ) -> pd.DataFrame:
     """
     Load bet builder legs.
 
-    If the file doesn't exist, generates synthetic bet builder legs from prop lines.
+    Missing files fail by default. Synthetic generation requires allow_synthetic=True.
 
     Expected columns:
         - builder_id: Unique builder identifier
@@ -381,11 +388,13 @@ def load_bet_builder_legs(
         ]
         df = _read_csv(path, parse_dates=["game_date"], required_columns=required_columns)
     else:
-        logger.info("Bet builder legs file not found, generating synthetic data...")
+        if not allow_synthetic:
+            raise DataLoadError(f"Real builder legs required: {path}; synthetic generation is disabled")
+        logger.warning("EXPLICIT SYNTHETIC DEMO: generating builder legs")
         if player_games is None:
             player_games = load_player_game_logs()
         if prop_lines is None:
-            prop_lines = load_prop_lines(player_games=player_games)
+            prop_lines = load_prop_lines(player_games=player_games, allow_synthetic=True)
         df = _generate_synthetic_bet_builders(prop_lines, player_games)
 
     # Convert date to date object

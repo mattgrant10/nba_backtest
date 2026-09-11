@@ -1,0 +1,33 @@
+{
+  "normal_seconds": 147.839,
+  "test_seconds": 146.371,
+  "figures": 317,
+  "tables": 45,
+  "legacy_tables_compared": 42,
+  "normal_test_table_hashes_equal": true,
+  "source_hashes_verified": true,
+  "report_pages": 318,
+  "verbose_log_pages": 110,
+  "normal_stage_seconds": {
+    "Load data": 0.094,
+    "Prepare data": 0.048,
+    "Player diagnostics": 0.883,
+    "Player aggregates": 0.251,
+    "Team aggregates": 0.224,
+    "Home and away": 0.159,
+    "Win and loss": 0.004,
+    "Temporal trends": 0.432,
+    "Player consistency": 10.538,
+    "Historical line hit rates": 17.483,
+    "Fixed-template historical replay": 0.617,
+    "Distribution diagnostics": 18.127,
+    "Dependence diagnostics": 30.669,
+    "Distribution figures": 2.288,
+    "Dependence figures": 1.741,
+    "Rank and tail figures": 1.466,
+    "Illustrative family figures": 2.317,
+    "Team consistency figures": 19.73,
+    "Export tables": 0.239,
+    "Assemble report": 39.731
+  }
+}

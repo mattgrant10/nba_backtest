@@ -1,0 +1,68 @@
+{
+  "name": "Sample 3-Leg Acca",
+  "legs": [
+    {
+      "name": "Leg 1 - Star Scorers",
+      "props": [
+        {
+          "player_last_name": "Ball",
+          "stat": "PTS",
+          "line": 20.5,
+          "over": true
+        },
+        {
+          "player_last_name": "Bridges",
+          "stat": "PTS",
+          "line": 18.5,
+          "over": true
+        }
+      ]
+    },
+    {
+      "name": "Leg 2 - All-Around Performance",
+      "props": [
+        {
+          "player_last_name": "Brunson",
+          "stat": "PTS",
+          "line": 22.5,
+          "over": true
+        },
+        {
+          "player_last_name": "Towns",
+          "stat": "REB",
+          "line": 10.5,
+          "over": true
+        },
+        {
+          "player_last_name": "Wagner",
+          "stat": "PTS",
+          "line": 19.5,
+          "over": true
+        }
+      ]
+    },
+    {
+      "name": "Leg 3 - Supporting Cast",
+      "props": [
+        {
+          "player_last_name": "Porzingis",
+          "stat": "PTS",
+          "line": 15.5,
+          "over": true
+        },
+        {
+          "player_last_name": "Daniels",
+          "stat": "AST",
+          "line": 4.5,
+          "over": true
+        },
+        {
+          "player_last_name": "Murphy",
+          "stat": "PTS",
+          "line": 13.5,
+          "over": true
+        }
+      ]
+    }
+  ]
+}
