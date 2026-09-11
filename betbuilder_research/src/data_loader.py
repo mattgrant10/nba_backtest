@@ -6,11 +6,36 @@ from pathlib import Path
 from typing import List, Optional
 
 import pandas as pd
+import numpy as np
 
 from .config import RAW_DATA_DIR, get_logger
 
 
 logger = get_logger(__name__)
+
+# Column mapping from PlayerStatistics format to pipeline format
+COLUMN_MAPPING = {
+    'personId': 'player_id',
+    'gameId': 'game_id',
+    'gameDateTimeEst': 'game_date',
+    'points': 'pts',
+    'threePointersMade': 'fg3m',
+    'assists': 'ast',
+    'reboundsTotal': 'reb',
+    'firstName': 'first_name',
+    'lastName': 'last_name',
+    'playerteamName': 'team',
+    'opponentteamName': 'opponent',
+    'home': 'home_away',
+    'numMinutes': 'minutes',
+    'steals': 'stl',
+    'blocks': 'blk',
+    'turnovers': 'tov',
+    'fieldGoalsMade': 'fgm',
+    'fieldGoalsAttempted': 'fga',
+    'freeThrowsMade': 'ftm',
+    'freeThrowsAttempted': 'fta',
+}
 
 
 class DataLoadError(Exception):
@@ -61,10 +86,12 @@ def load_player_game_logs(path: Optional[Path] = None) -> pd.DataFrame:
     """
     Load historic player game logs.
 
-    Expected columns:
+    Automatically detects and loads from PlayerStatistics_*.csv files if
+    player_game_logs.csv doesn't exist, applying column mapping.
+
+    Expected output columns:
         - game_id: Unique game identifier
         - game_date: Date of the game
-        - season: Season identifier
         - player_id: Unique player identifier
         - player_name: Player name
         - team: Player's team
@@ -77,22 +104,26 @@ def load_player_game_logs(path: Optional[Path] = None) -> pd.DataFrame:
         - minutes: Minutes played
 
     Args:
-        path: Optional path to CSV file (defaults to RAW_DATA_DIR/player_game_logs.csv)
+        path: Optional path to CSV file
 
     Returns:
         DataFrame with player game logs
 
     Raises:
-        DataLoadError: If file doesn't exist or required columns are missing
+        DataLoadError: If no suitable file exists
     """
     if path is None:
         path = RAW_DATA_DIR / "player_game_logs.csv"
 
-    required_columns = [
-        "game_id", "game_date", "player_id", "pts", "fg3m", "ast", "reb"
-    ]
-
-    df = _read_csv(path, parse_dates=["game_date"], required_columns=required_columns)
+    # Try loading the standard file first
+    if path.exists():
+        required_columns = [
+            "game_id", "game_date", "player_id", "pts", "fg3m", "ast", "reb"
+        ]
+        df = _read_csv(path, parse_dates=["game_date"], required_columns=required_columns)
+    else:
+        # Look for PlayerStatistics files
+        df = _load_player_statistics_file()
 
     # Convert date to date object
     df["game_date"] = pd.to_datetime(df["game_date"]).dt.date
@@ -115,9 +146,65 @@ def load_player_game_logs(path: Optional[Path] = None) -> pd.DataFrame:
     return df
 
 
-def load_prop_lines(path: Optional[Path] = None) -> pd.DataFrame:
+def _load_player_statistics_file() -> pd.DataFrame:
+    """
+    Load from PlayerStatistics_*.csv files and apply column mapping.
+
+    Returns:
+        DataFrame with standardized column names
+    """
+    # Try different file names in order of preference
+    candidates = [
+        RAW_DATA_DIR / "PlayerStatistics_2025-2026_Feb.csv",
+        RAW_DATA_DIR / "PlayerStatistics_2018_2025.csv",
+        RAW_DATA_DIR / "PlayerStatistics_2024_2025.csv",
+        RAW_DATA_DIR / "PlayerStatistics.csv",
+    ]
+
+    source_path = None
+    for candidate in candidates:
+        if candidate.exists():
+            source_path = candidate
+            break
+
+    if source_path is None:
+        raise DataLoadError(
+            f"No player statistics file found. Looked for:\n"
+            + "\n".join(f"  - {c}" for c in candidates)
+        )
+
+    logger.info(f"Loading from {source_path.name} (auto-detected)")
+
+    # Load with date parsing
+    df = pd.read_csv(source_path, parse_dates=["gameDateTimeEst"])
+    logger.info(f"Loaded {len(df):,} rows from {source_path.name}")
+
+    # Apply column mapping
+    df = df.rename(columns=COLUMN_MAPPING)
+
+    # Create player_name if not present
+    if "player_name" not in df.columns and "first_name" in df.columns:
+        df["player_name"] = df["first_name"] + " " + df["last_name"]
+
+    # Ensure required columns exist
+    required = ["game_id", "game_date", "player_id", "pts", "fg3m", "ast", "reb"]
+    missing = set(required) - set(df.columns)
+    if missing:
+        raise DataLoadError(f"Missing required columns after mapping: {missing}")
+
+    return df
+
+
+def load_prop_lines(
+    path: Optional[Path] = None,
+    player_games: Optional[pd.DataFrame] = None,
+    learned_model_path: Optional[Path] = None
+) -> pd.DataFrame:
     """
     Load player prop lines.
+
+    If the file doesn't exist, generates synthetic prop lines from player game data.
+    If a learned model path is provided, uses the trained model to generate lines.
 
     Expected columns:
         - game_id: Unique game identifier
@@ -131,19 +218,31 @@ def load_prop_lines(path: Optional[Path] = None) -> pd.DataFrame:
 
     Args:
         path: Optional path to CSV file (defaults to RAW_DATA_DIR/player_prop_lines.csv)
+        player_games: Optional player games DataFrame for synthetic generation
+        learned_model_path: Optional path to trained LearnedLineGenerator model
 
     Returns:
         DataFrame with prop lines
-
-    Raises:
-        DataLoadError: If file doesn't exist or required columns are missing
     """
     if path is None:
         path = RAW_DATA_DIR / "player_prop_lines.csv"
 
-    required_columns = ["game_id", "game_date", "player_id", "stat", "line"]
-
-    df = _read_csv(path, parse_dates=["game_date"], required_columns=required_columns)
+    if path.exists():
+        required_columns = ["game_id", "game_date", "player_id", "stat", "line"]
+        df = _read_csv(path, parse_dates=["game_date"], required_columns=required_columns)
+    elif learned_model_path is not None and Path(learned_model_path).exists():
+        # Use learned model for line generation
+        logger.info(f"Using learned model from {learned_model_path}")
+        from .models.line_generator import LearnedLineGenerator
+        if player_games is None:
+            player_games = load_player_game_logs()
+        model = LearnedLineGenerator.load(learned_model_path)
+        df = model.generate_lines(player_games)
+    else:
+        logger.info("Prop lines file not found, generating synthetic data...")
+        if player_games is None:
+            player_games = load_player_game_logs()
+        df = _generate_synthetic_prop_lines(player_games)
 
     # Convert date to date object
     df["game_date"] = pd.to_datetime(df["game_date"]).dt.date
@@ -166,9 +265,91 @@ def load_prop_lines(path: Optional[Path] = None) -> pd.DataFrame:
     return df
 
 
-def load_bet_builder_legs(path: Optional[Path] = None) -> pd.DataFrame:
+def _generate_synthetic_prop_lines(player_games: pd.DataFrame) -> pd.DataFrame:
+    """
+    Generate synthetic prop lines based on player historical averages.
+
+    Lines are set around player averages with some noise to simulate
+    realistic betting lines.
+
+    Args:
+        player_games: DataFrame with player game logs
+
+    Returns:
+        DataFrame with synthetic prop lines
+    """
+    logger.info("Generating synthetic prop lines from player averages...")
+
+    stats = ["pts", "fg3m", "ast", "reb"]
+    records = []
+
+    # Calculate rolling averages for each player
+    player_games = player_games.sort_values(["player_id", "game_date"])
+
+    for player_id in player_games["player_id"].unique():
+        player_df = player_games[player_games["player_id"] == player_id].copy()
+
+        if len(player_df) < 5:
+            continue
+
+        # Calculate rolling mean (last 10 games)
+        for stat in stats:
+            if stat not in player_df.columns:
+                continue
+
+            player_df[f"{stat}_avg"] = (
+                player_df[stat]
+                .rolling(window=10, min_periods=3)
+                .mean()
+                .shift(1)  # Use previous games only
+            )
+
+        # Generate prop lines for each game after initial period
+        for idx, row in player_df.iloc[5:].iterrows():
+            for stat in stats:
+                avg_col = f"{stat}_avg"
+                if avg_col not in player_df.columns or pd.isna(row[avg_col]):
+                    continue
+
+                avg = row[avg_col]
+                if avg <= 0:
+                    continue
+
+                # Add some noise to simulate bookmaker line setting
+                # Lines typically round to 0.5
+                noise = np.random.normal(0, avg * 0.1)
+                line = round((avg + noise) * 2) / 2  # Round to nearest 0.5
+
+                # Generate odds (slightly favoring under to simulate vig)
+                over_odds = round(np.random.uniform(1.85, 1.95), 2)
+                under_odds = round(np.random.uniform(1.85, 1.95), 2)
+
+                records.append({
+                    "game_id": row["game_id"],
+                    "game_date": row["game_date"],
+                    "player_id": player_id,
+                    "stat": stat,
+                    "line": max(0.5, line),  # Ensure positive line
+                    "over_odds": over_odds,
+                    "under_odds": under_odds,
+                    "book": "synthetic",
+                })
+
+    df = pd.DataFrame(records)
+    logger.info(f"Generated {len(df):,} synthetic prop lines")
+
+    return df
+
+
+def load_bet_builder_legs(
+    path: Optional[Path] = None,
+    prop_lines: Optional[pd.DataFrame] = None,
+    player_games: Optional[pd.DataFrame] = None
+) -> pd.DataFrame:
     """
     Load bet builder legs.
+
+    If the file doesn't exist, generates synthetic bet builder legs from prop lines.
 
     Expected columns:
         - builder_id: Unique builder identifier
@@ -184,22 +365,28 @@ def load_bet_builder_legs(path: Optional[Path] = None) -> pd.DataFrame:
 
     Args:
         path: Optional path to CSV file (defaults to RAW_DATA_DIR/bet_builder_legs.csv)
+        prop_lines: Optional prop lines DataFrame for synthetic generation
+        player_games: Optional player games DataFrame for synthetic generation
 
     Returns:
         DataFrame with bet builder legs
-
-    Raises:
-        DataLoadError: If file doesn't exist or required columns are missing
     """
     if path is None:
         path = RAW_DATA_DIR / "bet_builder_legs.csv"
 
-    required_columns = [
-        "builder_id", "game_id", "game_date", "player_id",
-        "stat", "direction", "line"
-    ]
-
-    df = _read_csv(path, parse_dates=["game_date"], required_columns=required_columns)
+    if path.exists():
+        required_columns = [
+            "builder_id", "game_id", "game_date", "player_id",
+            "stat", "direction", "line"
+        ]
+        df = _read_csv(path, parse_dates=["game_date"], required_columns=required_columns)
+    else:
+        logger.info("Bet builder legs file not found, generating synthetic data...")
+        if player_games is None:
+            player_games = load_player_game_logs()
+        if prop_lines is None:
+            prop_lines = load_prop_lines(player_games=player_games)
+        df = _generate_synthetic_bet_builders(prop_lines, player_games)
 
     # Convert date to date object
     df["game_date"] = pd.to_datetime(df["game_date"]).dt.date
@@ -231,6 +418,145 @@ def load_bet_builder_legs(path: Optional[Path] = None) -> pd.DataFrame:
     )
 
     return df
+
+
+def _generate_synthetic_bet_builders(
+    prop_lines: pd.DataFrame,
+    player_games: pd.DataFrame
+) -> pd.DataFrame:
+    """
+    Generate synthetic bet builder legs by combining prop lines.
+
+    Creates multi-leg builders (2-4 legs) from available prop lines,
+    simulating realistic bet builder construction.
+
+    Args:
+        prop_lines: DataFrame with prop lines
+        player_games: DataFrame with player game logs
+
+    Returns:
+        DataFrame with synthetic bet builder legs
+    """
+    logger.info("Generating synthetic bet builders from prop lines...")
+
+    np.random.seed(42)  # For reproducibility
+
+    # Get unique game dates with enough prop lines
+    games_with_props = (
+        prop_lines.groupby(["game_id", "game_date"])
+        .size()
+        .reset_index(name="n_props")
+    )
+    games_with_props = games_with_props[games_with_props["n_props"] >= 4]
+
+    records = []
+    builder_id = 0
+
+    # Sample games for builders (limit to avoid too much data)
+    sample_size = min(len(games_with_props), 5000)
+    sampled_games = games_with_props.sample(n=sample_size, random_state=42)
+
+    for _, game_row in sampled_games.iterrows():
+        game_id = game_row["game_id"]
+        game_date = game_row["game_date"]
+
+        # Get props for this game
+        game_props = prop_lines[prop_lines["game_id"] == game_id]
+
+        if len(game_props) < 2:
+            continue
+
+        # Create 1-3 builders per game
+        n_builders = np.random.randint(1, 4)
+
+        for _ in range(n_builders):
+            # Random number of legs (2-4)
+            n_legs = np.random.randint(2, min(5, len(game_props) + 1))
+
+            # Sample props for this builder
+            builder_props = game_props.sample(n=n_legs, replace=False)
+
+            # Calculate combined odds (multiply individual leg odds)
+            leg_odds = []
+            for leg_idx, (_, prop) in enumerate(builder_props.iterrows()):
+                # Random direction with slight over bias
+                direction = "over" if np.random.random() < 0.55 else "under"
+                leg_odd = prop["over_odds"] if direction == "over" else prop["under_odds"]
+                leg_odds.append(leg_odd)
+
+                records.append({
+                    "builder_id": builder_id,
+                    "leg_id": leg_idx,
+                    "game_id": game_id,
+                    "game_date": game_date,
+                    "player_id": prop["player_id"],
+                    "stat": prop["stat"],
+                    "direction": direction,
+                    "line": prop["line"],
+                    "leg_odds": leg_odd,
+                })
+
+            # Update builder_total_odds for all legs in this builder
+            total_odds = np.prod(leg_odds)
+            for i in range(n_legs):
+                records[-(n_legs - i)]["builder_total_odds"] = round(total_odds, 2)
+                records[-(n_legs - i)]["stake"] = 1.0
+
+            builder_id += 1
+
+    df = pd.DataFrame(records)
+
+    # Add actual outcomes based on player game data
+    if len(df) > 0:
+        df = _add_leg_outcomes(df, player_games)
+
+    logger.info(f"Generated {len(df):,} legs across {builder_id:,} builders")
+
+    return df
+
+
+def _add_leg_outcomes(legs_df: pd.DataFrame, player_games: pd.DataFrame) -> pd.DataFrame:
+    """
+    Add actual outcomes to bet builder legs based on player game data.
+
+    Args:
+        legs_df: DataFrame with bet builder legs
+        player_games: DataFrame with player game logs
+
+    Returns:
+        DataFrame with leg_hit column added
+    """
+    # Create lookup for actual stats
+    stat_lookup = player_games.set_index(["game_id", "player_id"])[
+        ["pts", "fg3m", "ast", "reb"]
+    ].to_dict("index")
+
+    def check_hit(row):
+        key = (row["game_id"], row["player_id"])
+        if key not in stat_lookup:
+            return np.nan
+
+        actual = stat_lookup[key].get(row["stat"], np.nan)
+        if pd.isna(actual):
+            return np.nan
+
+        if row["direction"] == "over":
+            return 1 if actual > row["line"] else 0
+        else:
+            return 1 if actual < row["line"] else 0
+
+    legs_df["leg_hit"] = legs_df.apply(check_hit, axis=1)
+
+    # Remove legs without outcomes
+    n_before = len(legs_df)
+    legs_df = legs_df.dropna(subset=["leg_hit"])
+    legs_df["leg_hit"] = legs_df["leg_hit"].astype(int)
+
+    n_removed = n_before - len(legs_df)
+    if n_removed > 0:
+        logger.info(f"Removed {n_removed:,} legs without matching game data")
+
+    return legs_df
 
 
 def validate_data_consistency(

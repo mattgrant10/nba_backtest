@@ -21,6 +21,22 @@ sns.set_style("whitegrid")
 plt.rcParams['figure.figsize'] = (12, 8)
 plt.rcParams['font.size'] = 10
 
+_TITLE_SUFFIX = ""
+
+
+def set_title_suffix(suffix: str | None) -> None:
+    """Set a global suffix appended to visualization/table titles."""
+    global _TITLE_SUFFIX
+    _TITLE_SUFFIX = suffix or ""
+
+
+def _with_suffix(title: str) -> str:
+    if not _TITLE_SUFFIX:
+        return title
+    if _TITLE_SUFFIX in title:
+        return title
+    return f"{title}\n{_TITLE_SUFFIX}"
+
 
 def display_dataframe(
     df: pd.DataFrame,
@@ -44,7 +60,7 @@ def display_dataframe(
         cols_per_chunk: Number of columns per chunk for wide tables
     """
     logger.info("=" * 80)
-    logger.info(f"{title}")
+    logger.info(f"{_with_suffix(title)}")
     logger.info("=" * 80)
     logger.info(f"Shape: {df.shape[0]:,} rows × {df.shape[1]} columns")
 
@@ -119,7 +135,7 @@ def display_summary_stats(
         title: Title for the display
     """
     logger.info("=" * 80)
-    logger.info(f"{title}")
+    logger.info(f"{_with_suffix(title)}")
     logger.info("=" * 80)
 
     if columns is None:
@@ -177,7 +193,7 @@ def plot_distributions(
         use_kde_for_percentages: Whether to add KDE to percentage plots (default False)
     """
     logger.info("\n" + "=" * 100)
-    logger.info("DISTRIBUTION ANALYSIS - PRODUCTION STATISTICAL QUALITY")
+    logger.info(_with_suffix("DISTRIBUTION ANALYSIS - PRODUCTION STATISTICAL QUALITY"))
     logger.info("=" * 100)
 
     if columns is None:

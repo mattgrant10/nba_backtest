@@ -1,13 +1,13 @@
 #!/bin/bash
 # Quick NBA Statistics Analysis
-# Analyzes PlayerStatistics_2024_2025.csv with full visualizations
+# Analyzes PlayerStatistics_2025-2026_Feb.csv with full visualizations
 
 echo ""
 echo "================================================================================"
-echo "NBA PLAYER STATISTICS ANALYSIS - 2024-2025 SEASON"
+echo "NBA PLAYER STATISTICS ANALYSIS - 2025-2026 SEASON (THROUGH FEB)"
 echo "================================================================================"
 echo ""
-echo "Analyzing: data/raw/PlayerStatistics_2024_2025.csv"
+echo "Analyzing: data/raw/PlayerStatistics_2025-2026_Feb.csv"
 echo ""
 echo "This will perform:"
 echo "  ✓ Player-level game-by-game analysis"
@@ -28,8 +28,8 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
 
 # Check if data file exists
-if [ ! -f "data/raw/PlayerStatistics_2024_2025.csv" ]; then
-    echo "❌ ERROR: data/raw/PlayerStatistics_2024_2025.csv not found"
+if [ ! -f "data/raw/PlayerStatistics_2025-2026_Feb.csv" ]; then
+    echo "❌ ERROR: data/raw/PlayerStatistics_2025-2026_Feb.csv not found"
     echo ""
     echo "Please ensure the file is in the correct location."
     exit 1

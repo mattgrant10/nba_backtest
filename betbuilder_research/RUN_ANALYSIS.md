@@ -19,13 +19,25 @@ python data/dataedits.py
 **What it does:** Analyzes your actual 2024-2025 NBA player statistics with comprehensive visualizations.
 
 ### Requirements
-- File: `data/raw/PlayerStatistics_2024_2025.csv` ✓ (Already present)
+- File: `data/raw/PlayerStatistics_2025-2026_Feb.csv` ✓ (Already present)
 - All dependencies installed ✓
 
 ### Run Command
 
 ```bash
 python data/dataedits.py
+```
+
+---
+
+## 🔍 Compare Two Datasets
+
+Use this to compare the current dataset against an older one (row counts, columns, dtype changes, missingness, and timeline).
+
+```bash
+python scripts/compare_datasets.py \
+  --current data/raw/PlayerStatistics_2025-2026_Feb.csv \
+  --previous data/raw/PlayerStatistics_2024_2025.csv
 ```
 
 ### What You'll Get
@@ -396,8 +408,8 @@ python -c "import matplotlib; print(matplotlib.get_backend())"
 **Ready to run? Start here:**
 
 ```bash
-cd /Users/matthewraymondandrewgrant/PycharmProjects/nba_backtest/betbuilder_research
-python data/dataedits.py
+      cd /Users/matthewraymondandrewgrant/PycharmProjects/nba_backtest/betbuilder_research
+      python data/dataedits.py
 ```
 
 This will analyze your actual 2024-2025 season data with full visualizations in ~2-3 minutes!

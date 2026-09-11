@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Comprehensive NBA Player Statistics Analysis
-Analyzes PlayerStatistics_2024_2025.csv with detailed logging and visualizations
+Analyzes PlayerStatistics_2025-2026_Feb.csv with detailed logging and visualizations
 """
 
 import sys
@@ -28,6 +28,7 @@ from src.visualization import (
     plot_correlation_matrix,
     plot_boxplots,
     plot_value_counts,
+    set_title_suffix,
 )
 
 # Setup logging
@@ -38,6 +39,58 @@ logger = get_logger(__name__)
 sns.set_style("whitegrid")
 plt.rcParams['figure.figsize'] = (14, 8)
 
+DATASET_DATE_RANGE = ""
+_ORIG_AXES_SET_TITLE = None
+_ORIG_FIG_SUPTITLE = None
+
+
+def _with_dataset_range(title: str) -> str:
+    if not DATASET_DATE_RANGE:
+        return title
+    if DATASET_DATE_RANGE in str(title):
+        return title
+    return f"{title}\n{DATASET_DATE_RANGE}"
+
+
+def _patch_matplotlib_titles() -> None:
+    global _ORIG_AXES_SET_TITLE, _ORIG_FIG_SUPTITLE
+    if _ORIG_AXES_SET_TITLE is not None and _ORIG_FIG_SUPTITLE is not None:
+        return
+
+    import matplotlib.axes
+    import matplotlib.figure
+
+    _ORIG_AXES_SET_TITLE = matplotlib.axes.Axes.set_title
+    _ORIG_FIG_SUPTITLE = matplotlib.figure.Figure.suptitle
+
+    def _set_title(self, label, *args, **kwargs):
+        if label is None:
+            return _ORIG_AXES_SET_TITLE(self, label, *args, **kwargs)
+        return _ORIG_AXES_SET_TITLE(self, _with_dataset_range(str(label)), *args, **kwargs)
+
+    def _suptitle(self, t, *args, **kwargs):
+        if t is None:
+            return _ORIG_FIG_SUPTITLE(self, t, *args, **kwargs)
+        return _ORIG_FIG_SUPTITLE(self, _with_dataset_range(str(t)), *args, **kwargs)
+
+    matplotlib.axes.Axes.set_title = _set_title
+    matplotlib.figure.Figure.suptitle = _suptitle
+
+
+def _init_dataset_context(df: pd.DataFrame, date_col: str = "gameDateTimeEst") -> None:
+    global DATASET_DATE_RANGE
+    if date_col not in df.columns:
+        return
+
+    dates = pd.to_datetime(df[date_col], errors="coerce").dropna()
+    if dates.empty:
+        return
+
+    start_date = dates.min().date()
+    end_date = dates.max().date()
+    DATASET_DATE_RANGE = f"{start_date} to {end_date}"
+    set_title_suffix(DATASET_DATE_RANGE)
+    _patch_matplotlib_titles()
 
 def load_and_display_raw_data(file_path: Path) -> pd.DataFrame:
     """Load raw data and display comprehensive information."""
@@ -49,9 +102,10 @@ def load_and_display_raw_data(file_path: Path) -> pd.DataFrame:
     logger.info(f">>> File size: {file_path.stat().st_size / 1024**2:.2f} MB")
 
     # Load data
-    df = pd.read_csv(file_path, parse_dates=['gameDate'])
+    df = pd.read_csv(file_path, parse_dates=['gameDateTimeEst'])
 
     logger.info(f"✓ Successfully loaded {len(df):,} rows × {len(df.columns)} columns")
+    _init_dataset_context(df, date_col="gameDateTimeEst")
 
     # Display raw data
     display_dataframe(df, "Raw Player Statistics Data", max_rows=20)
@@ -88,7 +142,7 @@ def clean_and_prepare_data(df: pd.DataFrame) -> pd.DataFrame:
 
     # Convert date
     logger.info(">>> Processing dates...")
-    df_clean['game_date'] = pd.to_datetime(df_clean['gameDate'])
+    df_clean['game_date'] = pd.to_datetime(df_clean['gameDateTimeEst'])
     df_clean['game_date_only'] = df_clean['game_date'].dt.date
     df_clean['day_of_week'] = df_clean['game_date'].dt.day_name()
     df_clean['month'] = df_clean['game_date'].dt.month
@@ -633,122 +687,143 @@ def identify_prop_bet_opportunities(df: pd.DataFrame, player_agg: pd.DataFrame):
     teams = sorted(prop_with_team['team'].dropna().unique())
     logger.info(f">>> Analyzing {len(teams)} teams")
 
-    # Create team-by-team scatterplots for POINTS
-    logger.info("\n>>> Creating Points Consistency by Team plots...")
+    # Create INDIVIDUAL team plots for POINTS - one plot per team with ALL player names
+    logger.info("\n>>> Creating Points Consistency by Team plots (individual per team)...")
     n_teams = len(teams)
-    n_cols = 5
-    n_rows = (n_teams + n_cols - 1) // n_cols
-
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(20, 4 * n_rows))
-    axes = axes.flatten()
 
     for idx, team in enumerate(teams):
         team_data = prop_with_team[
             (prop_with_team['team'] == team) &
             (prop_with_team['games_played'] >= 10)
-        ]
+        ].copy()
 
         if len(team_data) > 0:
-            axes[idx].scatter(team_data['PPG'], team_data['PTS_CV'], alpha=0.7, s=100)
+            fig, ax = plt.subplots(figsize=(14, 10))
 
-            # Add player labels for top scorers
-            top_scorers = team_data.nlargest(3, 'PPG')
-            for _, player in top_scorers.iterrows():
-                axes[idx].annotate(
+            # Color by consistency
+            colors = ['green' if cv < 0.40 else 'orange' if cv < 0.60 else 'red'
+                     for cv in team_data['PTS_CV']]
+
+            ax.scatter(team_data['PPG'], team_data['PTS_CV'], alpha=0.7, s=150,
+                      c=colors, edgecolor='black', linewidth=1.5)
+
+            # Add ALL player labels
+            for _, player in team_data.iterrows():
+                ax.annotate(
                     player['player_name'].split()[-1],  # Last name only
                     (player['PPG'], player['PTS_CV']),
-                    fontsize=8,
-                    alpha=0.7
+                    fontsize=9,
+                    fontweight='bold',
+                    xytext=(5, 5),
+                    textcoords='offset points'
                 )
 
-            axes[idx].set_xlabel('Points Per Game', fontsize=9)
-            axes[idx].set_ylabel('CV (lower = consistent)', fontsize=9)
-            axes[idx].set_title(f'{team}', fontsize=10, fontweight='bold')
-            axes[idx].grid(True, alpha=0.3)
+            ax.axhline(0.40, color='blue', linestyle='--', linewidth=1.5, alpha=0.7,
+                      label='Good consistency (CV=0.40)')
+            ax.set_xlabel('Points Per Game', fontsize=11, fontweight='bold')
+            ax.set_ylabel('CV (lower = more consistent)', fontsize=11, fontweight='bold')
+            ax.set_title(f'{team} - Points Consistency vs PPG\n({len(team_data)} players)',
+                        fontsize=14, fontweight='bold')
+            ax.grid(True, alpha=0.3)
+            ax.legend(fontsize=9)
 
-    # Hide unused subplots
-    for idx in range(n_teams, len(axes)):
-        axes[idx].axis('off')
+            plt.tight_layout()
+            plt.show()
 
-    plt.suptitle('Points Consistency vs PPG by Team', fontsize=16, fontweight='bold', y=1.00)
-    plt.tight_layout()
-    plt.show()
+        if (idx + 1) % 10 == 0:
+            logger.info(f"    Completed {idx + 1}/{n_teams} teams (Points)")
 
-    # Create team-by-team scatterplots for ASSISTS
-    logger.info("\n>>> Creating Assists Consistency by Team plots...")
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(20, 4 * n_rows))
-    axes = axes.flatten()
+    # Create INDIVIDUAL team plots for ASSISTS - one plot per team with ALL player names
+    logger.info("\n>>> Creating Assists Consistency by Team plots (individual per team)...")
 
     for idx, team in enumerate(teams):
         team_data = prop_with_team[
             (prop_with_team['team'] == team) &
             (prop_with_team['games_played'] >= 10) &
-            (prop_with_team['APG'] >= 2)  # Filter for relevant assist players
-        ]
+            (prop_with_team['APG'] >= 1)  # Filter for relevant assist players
+        ].copy()
 
         if len(team_data) > 0:
-            axes[idx].scatter(team_data['APG'], team_data['AST_CV'], alpha=0.7, s=100, color='orange')
+            fig, ax = plt.subplots(figsize=(14, 10))
 
-            # Add player labels for top assist players
-            top_assist = team_data.nlargest(3, 'APG')
-            for _, player in top_assist.iterrows():
-                axes[idx].annotate(
+            # Color by consistency
+            colors = ['green' if cv < 0.40 else 'orange' if cv < 0.60 else 'red'
+                     for cv in team_data['AST_CV']]
+
+            ax.scatter(team_data['APG'], team_data['AST_CV'], alpha=0.7, s=150,
+                      c=colors, edgecolor='black', linewidth=1.5)
+
+            # Add ALL player labels
+            for _, player in team_data.iterrows():
+                ax.annotate(
                     player['player_name'].split()[-1],  # Last name only
                     (player['APG'], player['AST_CV']),
-                    fontsize=8,
-                    alpha=0.7
+                    fontsize=9,
+                    fontweight='bold',
+                    xytext=(5, 5),
+                    textcoords='offset points'
                 )
 
-            axes[idx].set_xlabel('Assists Per Game', fontsize=9)
-            axes[idx].set_ylabel('CV (lower = consistent)', fontsize=9)
-            axes[idx].set_title(f'{team}', fontsize=10, fontweight='bold')
-            axes[idx].grid(True, alpha=0.3)
+            ax.axhline(0.40, color='blue', linestyle='--', linewidth=1.5, alpha=0.7,
+                      label='Good consistency (CV=0.40)')
+            ax.set_xlabel('Assists Per Game', fontsize=11, fontweight='bold')
+            ax.set_ylabel('CV (lower = more consistent)', fontsize=11, fontweight='bold')
+            ax.set_title(f'{team} - Assists Consistency vs APG\n({len(team_data)} players)',
+                        fontsize=14, fontweight='bold')
+            ax.grid(True, alpha=0.3)
+            ax.legend(fontsize=9)
 
-    # Hide unused subplots
-    for idx in range(n_teams, len(axes)):
-        axes[idx].axis('off')
+            plt.tight_layout()
+            plt.show()
 
-    plt.suptitle('Assists Consistency vs APG by Team', fontsize=16, fontweight='bold', y=1.00)
-    plt.tight_layout()
-    plt.show()
+        if (idx + 1) % 10 == 0:
+            logger.info(f"    Completed {idx + 1}/{n_teams} teams (Assists)")
 
-    # Create team-by-team scatterplots for REBOUNDS
-    logger.info("\n>>> Creating Rebounds Consistency by Team plots...")
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(20, 4 * n_rows))
-    axes = axes.flatten()
+    # Create INDIVIDUAL team plots for REBOUNDS - one plot per team with ALL player names
+    logger.info("\n>>> Creating Rebounds Consistency by Team plots (individual per team)...")
 
     for idx, team in enumerate(teams):
         team_data = prop_with_team[
             (prop_with_team['team'] == team) &
             (prop_with_team['games_played'] >= 10) &
-            (prop_with_team['RPG'] >= 3)  # Filter for relevant rebounders
-        ]
+            (prop_with_team['RPG'] >= 2)  # Filter for relevant rebounders
+        ].copy()
 
         if len(team_data) > 0:
-            axes[idx].scatter(team_data['RPG'], team_data['REB_CV'], alpha=0.7, s=100, color='green')
+            fig, ax = plt.subplots(figsize=(14, 10))
 
-            # Add player labels for top rebounders
-            top_reb = team_data.nlargest(3, 'RPG')
-            for _, player in top_reb.iterrows():
-                axes[idx].annotate(
+            # Color by consistency
+            colors = ['green' if cv < 0.40 else 'orange' if cv < 0.60 else 'red'
+                     for cv in team_data['REB_CV']]
+
+            ax.scatter(team_data['RPG'], team_data['REB_CV'], alpha=0.7, s=150,
+                      c=colors, edgecolor='black', linewidth=1.5)
+
+            # Add ALL player labels
+            for _, player in team_data.iterrows():
+                ax.annotate(
                     player['player_name'].split()[-1],  # Last name only
                     (player['RPG'], player['REB_CV']),
-                    fontsize=8,
-                    alpha=0.7
+                    fontsize=9,
+                    fontweight='bold',
+                    xytext=(5, 5),
+                    textcoords='offset points'
                 )
 
-            axes[idx].set_xlabel('Rebounds Per Game', fontsize=9)
-            axes[idx].set_ylabel('CV (lower = consistent)', fontsize=9)
-            axes[idx].set_title(f'{team}', fontsize=10, fontweight='bold')
-            axes[idx].grid(True, alpha=0.3)
+            ax.axhline(0.40, color='blue', linestyle='--', linewidth=1.5, alpha=0.7,
+                      label='Good consistency (CV=0.40)')
+            ax.set_xlabel('Rebounds Per Game', fontsize=11, fontweight='bold')
+            ax.set_ylabel('CV (lower = more consistent)', fontsize=11, fontweight='bold')
+            ax.set_title(f'{team} - Rebounds Consistency vs RPG\n({len(team_data)} players)',
+                        fontsize=14, fontweight='bold')
+            ax.grid(True, alpha=0.3)
+            ax.legend(fontsize=9)
 
-    # Hide unused subplots
-    for idx in range(n_teams, len(axes)):
-        axes[idx].axis('off')
+            plt.tight_layout()
+            plt.show()
 
-    plt.suptitle('Rebounds Consistency vs RPG by Team', fontsize=16, fontweight='bold', y=1.00)
-    plt.tight_layout()
-    plt.show()
+        if (idx + 1) % 10 == 0:
+            logger.info(f"    Completed {idx + 1}/{n_teams} teams (Rebounds)")
 
     logger.info("\n✓ Team-by-team consistency analysis complete!")
 
@@ -933,20 +1008,71 @@ def identify_prop_bet_opportunities(df: pd.DataFrame, player_agg: pd.DataFrame):
     return prop_analysis
 
 
-def analyze_line_hit_rates(df: pd.DataFrame, prop_analysis: pd.DataFrame):
+def create_table_figure(data: pd.DataFrame, title: str, subtitle: str = '') -> plt.Figure:
+    """
+    Create a matplotlib figure from a pandas DataFrame table.
+
+    Args:
+        data: DataFrame to display
+        title: Main title
+        subtitle: Optional subtitle
+
+    Returns:
+        matplotlib Figure object
+    """
+    fig, ax = plt.subplots(figsize=(14, max(6, len(data) * 0.4 + 2)))
+    ax.axis('tight')
+    ax.axis('off')
+
+    # Create table
+    table = ax.table(cellText=data.values,
+                    colLabels=data.columns,
+                    cellLoc='center',
+                    loc='center',
+                    bbox=[0, 0, 1, 1])
+
+    # Style the table
+    table.auto_set_font_size(False)
+    table.set_fontsize(9)
+    table.scale(1, 2)
+
+    # Header styling
+    for i in range(len(data.columns)):
+        table[(0, i)].set_facecolor('#4472C4')
+        table[(0, i)].set_text_props(weight='bold', color='white')
+
+    # Alternate row colors
+    for i in range(1, len(data) + 1):
+        for j in range(len(data.columns)):
+            if i % 2 == 0:
+                table[(i, j)].set_facecolor('#F2F2F2')
+            else:
+                table[(i, j)].set_facecolor('white')
+
+    # Add title
+    title_text = _with_dataset_range(title)
+    if subtitle:
+        title_text += f'\n{subtitle}'
+
+    fig.text(0.5, 0.98, title_text, ha='center', va='top', fontsize=14, fontweight='bold')
+
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
+
+    return fig
+
+
+def analyze_line_hit_rates(df: pd.DataFrame, prop_analysis: pd.DataFrame, output_dir: Path = None):
     """
     Analyze hit rates for players at different line positions relative to their averages.
 
     Organized TEAM-BY-TEAM with separate tables for:
-    - Points (PTS)
-    - Assists (AST)
-    - Rebounds (REB)
+    - Points (PTS): Offsets of +/-5, +/-10
+    - Assists (AST): Offsets of +/-2, +/-4
+    - Rebounds (REB): Offsets of +/-2, +/-4
 
-    For each team, shows all qualified players with hit rates at:
-    - Average - 10
-    - Average - 5
-    - Average + 5
-    - Average + 10
+    Different offsets are used to account for scale differences:
+    - Points have higher typical values (20-30), so +/-5 and +/-10 are appropriate
+    - Assists/Rebounds have lower typical values (5-10), so +/-2 and +/-4 are more appropriate
 
     Hit Rate Definition: Percentage of games where the player's result was OVER the line.
     Example: If a player averages 20 PPG and went over 20 in 12 of 20 games, hit rate = 60%
@@ -958,18 +1084,44 @@ def analyze_line_hit_rates(df: pd.DataFrame, prop_analysis: pd.DataFrame):
     logger.info(">>> Hit Rate = % of games player goes OVER the specified line")
 
     # Define stats to analyze - ONLY THE BIG 3
+    # Each stat has different offsets based on typical scale:
+    # - Points: +/-5, +/-10 (larger scale)
+    # - Assists: +/-2, +/-4 (smaller scale)
+    # - Rebounds: +/-2, +/-4 (smaller scale)
     stats_to_analyze = {
-        'PTS': {'col': 'PTS', 'avg_col': 'PPG', 'name': 'Points'},
-        'AST': {'col': 'AST', 'avg_col': 'APG', 'name': 'Assists'},
-        'REB': {'col': 'REB', 'avg_col': 'RPG', 'name': 'Rebounds'}
-    }
-
-    # Line offsets to test - ONLY +/-5 and +/-10
-    offsets = {
-        'Avg-10': -10,
-        'Avg-5': -5,
-        'Avg+5': +5,
-        'Avg+10': +10
+        'PTS': {
+            'col': 'PTS',
+            'avg_col': 'PPG',
+            'name': 'Points',
+            'offsets': {
+                'Avg-10': -10,
+                'Avg-5': -5,
+                'Avg+5': +5,
+                'Avg+10': +10
+            }
+        },
+        'AST': {
+            'col': 'AST',
+            'avg_col': 'APG',
+            'name': 'Assists',
+            'offsets': {
+                'Avg-4': -4,
+                'Avg-2': -2,
+                'Avg+2': +2,
+                'Avg+4': +4
+            }
+        },
+        'REB': {
+            'col': 'REB',
+            'avg_col': 'RPG',
+            'name': 'Rebounds',
+            'offsets': {
+                'Avg-4': -4,
+                'Avg-2': -2,
+                'Avg+2': +2,
+                'Avg+4': +4
+            }
+        }
     }
 
     # Get team for each player
@@ -1012,12 +1164,12 @@ def analyze_line_hit_rates(df: pd.DataFrame, prop_analysis: pd.DataFrame):
 
             if pd.isna(avg_value) or avg_value == 0:
                 # Skip if no average available
-                for offset_name in offsets.keys():
+                for offset_name in stat_info['offsets'].keys():
                     player_result[f'{stat_key}_{offset_name}'] = np.nan
                 continue
 
-            # Calculate hit rates for each offset
-            for offset_name, offset_value in offsets.items():
+            # Calculate hit rates for each offset (stat-specific)
+            for offset_name, offset_value in stat_info['offsets'].items():
                 line = avg_value + offset_value
 
                 # Count how many games player went OVER this line
@@ -1045,8 +1197,13 @@ def analyze_line_hit_rates(df: pd.DataFrame, prop_analysis: pd.DataFrame):
 
     logger.info(f"\n>>> Analyzing {len(teams)} teams")
 
-    # Store team results for return
+    # Store team results and figure paths
     results_by_team = {}
+    saved_figures = []
+
+    # Create output directory if provided
+    if output_dir is not None:
+        output_dir.mkdir(parents=True, exist_ok=True)
 
     # For each team, display 3 tables (PTS, AST, REB)
     for team in teams:
@@ -1072,7 +1229,20 @@ def analyze_line_hit_rates(df: pd.DataFrame, prop_analysis: pd.DataFrame):
         pts_data = pts_data.sort_values('PTS_avg', ascending=False).head(15)
         pts_data.columns = ['Player', 'Avg PPG', 'Games', 'Avg-10', 'Avg-5', 'Avg+5', 'Avg+10']
 
+        # Round all numeric columns
+        for col in ['Avg PPG', 'Avg-10', 'Avg-5', 'Avg+5', 'Avg+10']:
+            pts_data[col] = pts_data[col].round(1)
+
         print("\n" + tabulate(pts_data, headers='keys', tablefmt='grid', showindex=False, floatfmt='.1f'))
+
+        # Save as figure if output_dir provided
+        if output_dir is not None:
+            fig = create_table_figure(pts_data, f'{team}', 'Points Hit Rates (% of games OVER line)')
+            filename = f'hit_rates_{team.replace(" ", "_")}_points.png'
+            filepath = output_dir / filename
+            fig.savefig(filepath, dpi=300, bbox_inches='tight')
+            saved_figures.append(filepath)
+            plt.close(fig)
 
         # =====================================================================
         # TABLE 2: ASSISTS HIT RATES
@@ -1080,12 +1250,25 @@ def analyze_line_hit_rates(df: pd.DataFrame, prop_analysis: pd.DataFrame):
         logger.info(f"\n>>> ASSISTS HIT RATES (% of games OVER line)")
 
         # Sort by APG descending, take top 15
-        ast_cols = ['player_name', 'AST_avg', 'games', 'AST_Avg-10', 'AST_Avg-5', 'AST_Avg+5', 'AST_Avg+10']
+        ast_cols = ['player_name', 'AST_avg', 'games', 'AST_Avg-4', 'AST_Avg-2', 'AST_Avg+2', 'AST_Avg+4']
         ast_data = team_players[ast_cols].copy()
         ast_data = ast_data.sort_values('AST_avg', ascending=False).head(15)
-        ast_data.columns = ['Player', 'Avg APG', 'Games', 'Avg-10', 'Avg-5', 'Avg+5', 'Avg+10']
+        ast_data.columns = ['Player', 'Avg APG', 'Games', 'Avg-4', 'Avg-2', 'Avg+2', 'Avg+4']
+
+        # Round all numeric columns
+        for col in ['Avg APG', 'Avg-4', 'Avg-2', 'Avg+2', 'Avg+4']:
+            ast_data[col] = ast_data[col].round(1)
 
         print("\n" + tabulate(ast_data, headers='keys', tablefmt='grid', showindex=False, floatfmt='.1f'))
+
+        # Save as figure if output_dir provided
+        if output_dir is not None:
+            fig = create_table_figure(ast_data, f'{team}', 'Assists Hit Rates (% of games OVER line)')
+            filename = f'hit_rates_{team.replace(" ", "_")}_assists.png'
+            filepath = output_dir / filename
+            fig.savefig(filepath, dpi=300, bbox_inches='tight')
+            saved_figures.append(filepath)
+            plt.close(fig)
 
         # =====================================================================
         # TABLE 3: REBOUNDS HIT RATES
@@ -1093,12 +1276,25 @@ def analyze_line_hit_rates(df: pd.DataFrame, prop_analysis: pd.DataFrame):
         logger.info(f"\n>>> REBOUNDS HIT RATES (% of games OVER line)")
 
         # Sort by RPG descending, take top 15
-        reb_cols = ['player_name', 'REB_avg', 'games', 'REB_Avg-10', 'REB_Avg-5', 'REB_Avg+5', 'REB_Avg+10']
+        reb_cols = ['player_name', 'REB_avg', 'games', 'REB_Avg-4', 'REB_Avg-2', 'REB_Avg+2', 'REB_Avg+4']
         reb_data = team_players[reb_cols].copy()
         reb_data = reb_data.sort_values('REB_avg', ascending=False).head(15)
-        reb_data.columns = ['Player', 'Avg RPG', 'Games', 'Avg-10', 'Avg-5', 'Avg+5', 'Avg+10']
+        reb_data.columns = ['Player', 'Avg RPG', 'Games', 'Avg-4', 'Avg-2', 'Avg+2', 'Avg+4']
+
+        # Round all numeric columns
+        for col in ['Avg RPG', 'Avg-4', 'Avg-2', 'Avg+2', 'Avg+4']:
+            reb_data[col] = reb_data[col].round(1)
 
         print("\n" + tabulate(reb_data, headers='keys', tablefmt='grid', showindex=False, floatfmt='.1f'))
+
+        # Save as figure if output_dir provided
+        if output_dir is not None:
+            fig = create_table_figure(reb_data, f'{team}', 'Rebounds Hit Rates (% of games OVER line)')
+            filename = f'hit_rates_{team.replace(" ", "_")}_rebounds.png'
+            filepath = output_dir / filename
+            fig.savefig(filepath, dpi=300, bbox_inches='tight')
+            saved_figures.append(filepath)
+            plt.close(fig)
 
     # =========================================================================
     # LEAGUE-WIDE SUMMARY STATISTICS
@@ -1112,7 +1308,7 @@ def analyze_line_hit_rates(df: pd.DataFrame, prop_analysis: pd.DataFrame):
     summary_data = []
     for stat_key, stat_info in stats_to_analyze.items():
         stat_summary = {'Stat': stat_info['name']}
-        for offset_name in offsets.keys():
+        for offset_name in stat_info['offsets'].keys():
             col_name = f'{stat_key}_{offset_name}'
             avg_hit_rate = all_players_df[col_name].mean()
             stat_summary[offset_name] = avg_hit_rate
@@ -1122,24 +1318,37 @@ def analyze_line_hit_rates(df: pd.DataFrame, prop_analysis: pd.DataFrame):
     print("\n" + tabulate(summary_df, headers='keys', tablefmt='grid', showindex=False, floatfmt='.1f'))
 
     logger.info("\n>>> Interpretation Guide:")
-    logger.info("    - Avg-10: Very conservative line (should have high hit rate ~80-90%)")
-    logger.info("    - Avg-5: Conservative line (should have hit rate ~60-70%)")
-    logger.info("    - Avg+5: Aggressive line (should have hit rate ~30-40%)")
-    logger.info("    - Avg+10: Very aggressive line (should have low hit rate ~10-20%)")
+    logger.info("    POINTS (scale: +/-5, +/-10):")
+    logger.info("      - Avg-10: Very conservative line (should have high hit rate ~80-90%)")
+    logger.info("      - Avg-5: Conservative line (should have hit rate ~60-70%)")
+    logger.info("      - Avg+5: Aggressive line (should have hit rate ~30-40%)")
+    logger.info("      - Avg+10: Very aggressive line (should have low hit rate ~10-20%)")
+    logger.info("    ASSISTS & REBOUNDS (scale: +/-2, +/-4):")
+    logger.info("      - Avg-4: Very conservative line (should have high hit rate ~80-90%)")
+    logger.info("      - Avg-2: Conservative line (should have hit rate ~60-70%)")
+    logger.info("      - Avg+2: Aggressive line (should have hit rate ~30-40%)")
+    logger.info("      - Avg+4: Very aggressive line (should have low hit rate ~10-20%)")
 
     logger.info("\n>>> How to Use:")
-    logger.info("    1. Look for players with 70%+ hit rate at Avg-5 (reliable for accumulators)")
-    logger.info("    2. Compare actual hit rates vs expected to find value")
-    logger.info("    3. Players with high Avg+5 rates (>40%) are outperforming their average")
-    logger.info("    4. Low hit rates at conservative lines (<60% at Avg-5) suggest inconsistency")
+    logger.info("    1. Points: Look for 70%+ hit rate at Avg-5 (reliable for accumulators)")
+    logger.info("    2. Assists/Rebounds: Look for 70%+ hit rate at Avg-2 (reliable for accumulators)")
+    logger.info("    3. Compare actual hit rates vs expected to find value")
+    logger.info("    4. High aggressive rates (>40% at Avg+5/+2) indicate outperformance")
+    logger.info("    5. Low hit rates at conservative lines suggest inconsistency")
 
     logger.info("\n✓ Line hit rate analysis complete!")
+
+    # Log figure generation
+    if output_dir is not None and len(saved_figures) > 0:
+        logger.info(f"\n>>> Saved {len(saved_figures)} hit rate table figures to {output_dir}")
+        logger.info(f"    ({len(teams)} teams × 3 tables each = {len(saved_figures)} figures)")
 
     # Return results for further analysis
     results = {
         'all_players': all_players_df,
         'by_team': results_by_team,
-        'summary': summary_df
+        'summary': summary_df,
+        'figures': saved_figures
     }
 
     return results
@@ -3010,7 +3219,7 @@ def analyze_historical_accas(df: pd.DataFrame, prop_analysis: pd.DataFrame):
     return leg_df, prop_df
 
 
-def test_distributions(df: pd.DataFrame) -> pd.DataFrame:
+def test_distributions(df: pd.DataFrame, output_dir: Path | None = None, plot: bool = True) -> pd.DataFrame:
     """
     Test each numeric variable against multiple distributions to find best fit.
     Uses Kolmogorov-Smirnov, Anderson-Darling, and Chi-Square tests.
@@ -3045,6 +3254,12 @@ def test_distributions(df: pd.DataFrame) -> pd.DataFrame:
     logger.info(f"    Using: Kolmogorov-Smirnov, Anderson-Darling, Shapiro-Wilk, Jarque-Bera tests")
 
     results = []
+
+    if output_dir is None:
+        output_dir = Path("output/figures")
+    dist_plot_dir = output_dir / "distribution_fits"
+    if plot:
+        dist_plot_dir.mkdir(parents=True, exist_ok=True)
 
     for col in numeric_cols:
         data = df[col].dropna()
@@ -3154,6 +3369,48 @@ def test_distributions(df: pd.DataFrame) -> pd.DataFrame:
             'JB_P_Value': jb_pval,
             'Is_Normal': 'Yes' if is_normal else 'No'
         })
+
+        # Plot all fitted distributions for this variable
+        if plot and len(dist_results) > 0:
+            try:
+                fig, ax = plt.subplots(figsize=(12, 7))
+
+                # Histogram of data
+                ax.hist(data, bins=50, density=True, alpha=0.35, color="gray", edgecolor="white", label="Data")
+
+                x_min, x_max = float(np.min(data)), float(np.max(data))
+                x_grid = np.linspace(x_min, x_max, 400)
+
+                # Plot in a fixed order for readability
+                for dist_name in distributions_to_test.keys():
+                    if dist_name not in dist_results:
+                        continue
+                    params = dist_results[dist_name]["params"]
+                    dist_func = distributions_to_test[dist_name]
+
+                    if dist_name in ["Poisson", "Negative Binomial"]:
+                        x_int = np.arange(int(np.floor(x_min)), int(np.ceil(x_max)) + 1)
+                        if dist_name == "Poisson":
+                            y = dist_func.pmf(x_int, *params)
+                        else:
+                            y = dist_func.pmf(x_int, *params)
+                        ax.plot(x_int, y, linewidth=2, label=dist_name)
+                    else:
+                        y = dist_func.pdf(x_grid, *params)
+                        ax.plot(x_grid, y, linewidth=2, label=dist_name)
+
+                ax.set_title(f"Distribution Fits - {col}", fontweight="bold")
+                ax.set_xlabel(col)
+                ax.set_ylabel("Density")
+                ax.legend(fontsize=8, ncol=2)
+                ax.grid(True, alpha=0.2)
+
+                fig.tight_layout()
+                fig_path = dist_plot_dir / f"distribution_fits_{col}.png"
+                plt.savefig(fig_path, dpi=200, bbox_inches="tight")
+                plt.close(fig)
+            except Exception as e:
+                logger.warning(f"Plot failed for {col}: {str(e)[:80]}")
 
     # Create results DataFrame
     results_df = pd.DataFrame(results)
@@ -3619,7 +3876,10 @@ def create_copula_visualizations(df: pd.DataFrame, copula_results: pd.DataFrame,
 
         # Add correlation info
         pearson_r = pair['Pearson_r']
-        spearman_rho = pair['Spearman_ρ']
+        spearman_rho = pd.to_numeric(pair['Spearman_ρ'], errors="coerce")
+        if not np.isfinite(spearman_rho):
+            logger.warning(f"Invalid Spearman rho for {var1} vs {var2}, defaulting to 0.")
+            spearman_rho = 0.0
         dep_type = pair['Dependency_Type']
 
         # Title with correlation info
@@ -3900,15 +4160,316 @@ def create_additional_copula_plots(df: pd.DataFrame, copula_results: pd.DataFram
     return saved_figures
 
 
-def create_team_consistency_plots(df: pd.DataFrame, prop_analysis: pd.DataFrame, output_dir: Path, teams_per_page: int = 3):
+def create_fitted_copula_plots(df: pd.DataFrame, copula_results: pd.DataFrame, output_dir: Path):
     """
-    Create team-by-team consistency plots in small batches.
+    Create fitted copula visualizations showing different copula families.
+
+    Fits and visualizes:
+    - Gaussian copula
+    - Clayton copula (lower tail dependence)
+    - Gumbel copula (upper tail dependence)
+    - Frank copula (symmetric dependence)
+
+    Args:
+        df: DataFrame with game data
+        copula_results: Results from copula analysis
+        output_dir: Directory to save figures
+
+    Returns:
+        List of figure file paths
+    """
+    logger.info("\n" + "=" * 100)
+    logger.info("FITTED COPULA VISUALIZATIONS")
+    logger.info("=" * 100)
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    saved_figures = []
+
+    # Get top 4 pairs for copula fitting
+    top_pairs = copula_results.nlargest(4, 'Spearman_ρ', keep='all').head(4)
+
+    if len(top_pairs) == 0:
+        logger.warning("No pairs available for copula fitting")
+        return saved_figures
+
+    logger.info(f"\n>>> Fitting copulas for top {len(top_pairs)} variable pairs")
+
+    # Create 2x2 grid for top 4 pairs
+    fig, axes = plt.subplots(2, 2, figsize=(16, 14))
+    axes = axes.flatten()
+
+    from scipy.stats import rankdata, gaussian_kde
+
+    for idx, (_, pair) in enumerate(top_pairs.iterrows()):
+        if idx >= 4:
+            break
+
+        ax = axes[idx]
+        var1, var2 = pair['Var1'], pair['Var2']
+
+        # Get data
+        plot_data = df[[var1, var2]].dropna()
+
+        if len(plot_data) < 50:
+            ax.text(0.5, 0.5, f'Insufficient data\n({var1} vs {var2})',
+                   ha='center', va='center', transform=ax.transAxes, fontsize=12)
+            continue
+
+        x = plot_data[var1].values
+        y = plot_data[var2].values
+
+        # Rank transform to [0, 1] - this is the empirical copula
+        x_rank = rankdata(x) / (len(x) + 1)
+        y_rank = rankdata(y) / (len(y) + 1)
+
+        # Plot empirical copula (actual data)
+        scatter = ax.scatter(x_rank, y_rank, alpha=0.4, s=15, c='steelblue',
+                           edgecolors='none', label='Empirical Copula', zorder=2)
+
+        # Fit Gaussian copula (using Spearman correlation)
+        spearman_rho = pair['Spearman_ρ']
+
+        # Create a grid for contour plotting
+        grid_size = 50
+        u_grid = np.linspace(0.01, 0.99, grid_size)
+        v_grid = np.linspace(0.01, 0.99, grid_size)
+        U, V = np.meshgrid(u_grid, v_grid)
+
+        # For Gaussian copula, transform to normal quantiles
+        from scipy.stats import norm
+
+        # Gaussian copula density contours (approximate)
+        # Convert uniform margins to normal quantiles
+        U_norm = norm.ppf(U)
+        V_norm = norm.ppf(V)
+
+        # Bivariate normal density with correlation = spearman_rho (approximation)
+        rho = float(np.clip(spearman_rho, -0.999, 0.999))
+        Z = np.exp(-0.5 * (U_norm**2 + V_norm**2 - 2*rho*U_norm*V_norm) / (1 - rho**2))
+        Z = Z / (2 * np.pi * np.sqrt(1 - rho**2))
+
+        # Plot Gaussian copula contours
+        contour = ax.contour(U, V, Z, levels=8, colors='red', alpha=0.6,
+                           linewidths=1.5, zorder=3)
+        ax.clabel(contour, inline=True, fontsize=7, fmt='%.2e')
+
+        # Add independence reference line
+        ax.plot([0, 1], [0, 1], 'k--', linewidth=1.5, alpha=0.4,
+               label='Independence', zorder=1)
+
+        # Get correlation info
+        pearson_r = pair['Pearson_r']
+        dep_type = pair['Dependency_Type']
+
+        # Title with correlation info
+        ax.set_title(f'{var1} vs {var2}\n'
+                    f'Gaussian Copula Fit | ρ_s={spearman_rho:.3f} | r_p={pearson_r:.3f}\n'
+                    f'{dep_type}',
+                    fontsize=11, fontweight='bold')
+        ax.set_xlabel(f'{var1} (Rank)', fontsize=10, fontweight='bold')
+        ax.set_ylabel(f'{var2} (Rank)', fontsize=10, fontweight='bold')
+        ax.grid(True, alpha=0.2, linestyle=':')
+        ax.legend(fontsize=8, loc='upper left')
+
+        # Set limits
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+
+        # Add tail dependency annotation
+        upper_tail = pair.get('Upper_Tail_Dep', np.nan)
+        lower_tail = pair.get('Lower_Tail_Dep', np.nan)
+
+        annotation = f'Tail Dependencies:\n'
+        if not np.isnan(upper_tail):
+            annotation += f'Upper: {upper_tail:.2f}\n'
+        if not np.isnan(lower_tail):
+            annotation += f'Lower: {lower_tail:.2f}'
+
+        ax.text(0.98, 0.02, annotation, transform=ax.transAxes,
+               fontsize=8, verticalalignment='bottom', horizontalalignment='right',
+               bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=0.8))
+
+        logger.info(f"    Fitted Gaussian copula: {var1} ↔ {var2} (ρ={spearman_rho:.3f})")
+
+    # Hide unused subplots
+    for idx in range(len(top_pairs), 4):
+        axes[idx].set_visible(False)
+
+    fig.suptitle('Fitted Copula Analysis\n'
+                'Gaussian Copula Density Contours vs Empirical Data',
+                fontsize=16, fontweight='bold', y=0.995)
+
+    plt.tight_layout(rect=[0, 0, 1, 0.99])
+
+    # Save
+    filename = 'copula_fitted_gaussian.png'
+    filepath = output_dir / filename
+    plt.savefig(filepath, dpi=300, bbox_inches='tight')
+    saved_figures.append(filepath)
+    logger.info(f"\n    Saved: {filename}")
+
+    plt.close()
+
+    # =========================================================================
+    # COPULA FAMILY COMPARISON (for top pair only)
+    # =========================================================================
+    logger.info("\n>>> Creating copula family comparison plot...")
+
+    if len(top_pairs) > 0:
+        top_pair = top_pairs.iloc[0]
+        var1, var2 = top_pair['Var1'], top_pair['Var2']
+
+        plot_data = df[[var1, var2]].dropna()
+
+        if len(plot_data) >= 50:
+            x = plot_data[var1].values
+            y = plot_data[var2].values
+
+            # Rank transform
+            x_rank = rankdata(x) / (len(x) + 1)
+            y_rank = rankdata(y) / (len(y) + 1)
+
+            # Create 2x2 grid for different copula families
+            fig, axes = plt.subplots(2, 2, figsize=(16, 14))
+
+            spearman_rho = pd.to_numeric(top_pair['Spearman_ρ'], errors="coerce")
+            if not np.isfinite(spearman_rho):
+                logger.warning(f"Invalid Spearman rho for {var1} vs {var2}, defaulting to 0.")
+                spearman_rho = 0.0
+
+            # Subplot 1: Empirical Copula with KDE
+            ax1 = axes[0, 0]
+            ax1.scatter(x_rank, y_rank, alpha=0.3, s=10, c='steelblue', edgecolors='none')
+            ax1.plot([0, 1], [0, 1], 'k--', linewidth=1.5, alpha=0.4)
+
+            grid_size = 50
+            u_grid = np.linspace(0.01, 0.99, grid_size)
+            v_grid = np.linspace(0.01, 0.99, grid_size)
+            U, V = np.meshgrid(u_grid, v_grid)
+
+            # Add KDE contours for empirical copula
+            try:
+                kde = gaussian_kde(np.vstack([x_rank, y_rank]))
+                positions = np.vstack([U.ravel(), V.ravel()])
+                Z_kde = np.reshape(kde(positions).T, U.shape)
+                ax1.contour(U, V, Z_kde, levels=8, colors='darkblue', alpha=0.6, linewidths=1.5)
+            except:
+                pass
+
+            ax1.set_title(f'Empirical Copula (KDE)\n{var1} vs {var2}',
+                         fontsize=12, fontweight='bold')
+            ax1.set_xlabel(f'{var1} (Rank)', fontsize=10)
+            ax1.set_ylabel(f'{var2} (Rank)', fontsize=10)
+            ax1.grid(True, alpha=0.2)
+            ax1.set_xlim(0, 1)
+            ax1.set_ylim(0, 1)
+
+            # Subplot 2: Gaussian Copula (already computed above)
+            ax2 = axes[0, 1]
+            ax2.scatter(x_rank, y_rank, alpha=0.3, s=10, c='steelblue', edgecolors='none')
+            ax2.plot([0, 1], [0, 1], 'k--', linewidth=1.5, alpha=0.4)
+
+            # Gaussian copula contours (same as before)
+            rho = float(np.clip(spearman_rho, -0.999, 0.999))
+            U_norm = norm.ppf(U)
+            V_norm = norm.ppf(V)
+            Z_gaussian = np.exp(-0.5 * (U_norm**2 + V_norm**2 - 2*rho*U_norm*V_norm) / (1 - rho**2))
+            Z_gaussian = Z_gaussian / (2 * np.pi * np.sqrt(1 - rho**2))
+
+            ax2.contour(U, V, Z_gaussian, levels=8, colors='red', alpha=0.6, linewidths=1.5)
+            ax2.set_title(f'Gaussian Copula\nρ={spearman_rho:.3f}',
+                         fontsize=12, fontweight='bold')
+            ax2.set_xlabel(f'{var1} (Rank)', fontsize=10)
+            ax2.set_ylabel(f'{var2} (Rank)', fontsize=10)
+            ax2.grid(True, alpha=0.2)
+            ax2.set_xlim(0, 1)
+            ax2.set_ylim(0, 1)
+
+            # Subplot 3: Clayton Copula (Lower tail dependence)
+            ax3 = axes[1, 0]
+            ax3.scatter(x_rank, y_rank, alpha=0.3, s=10, c='steelblue', edgecolors='none')
+            ax3.plot([0, 1], [0, 1], 'k--', linewidth=1.5, alpha=0.4)
+
+            # Clayton copula parameter (approximate from Spearman)
+            if spearman_rho > 0:
+                theta_clayton = 2 * spearman_rho / (1 - spearman_rho)
+                theta_clayton = max(0.1, theta_clayton)  # Must be positive
+
+                # Clayton copula density (simplified visualization)
+                # Higher density in lower-left corner (lower tail dependence)
+                Z_clayton = (U**(-theta_clayton) + V**(-theta_clayton) - 1)**(-1/theta_clayton - 1)
+                Z_clayton = np.nan_to_num(Z_clayton, nan=0, posinf=0, neginf=0).astype(float, copy=False)
+
+                ax3.contour(U, V, Z_clayton, levels=8, colors='green', alpha=0.6, linewidths=1.5)
+                ax3.set_title(f'Clayton Copula\nθ={theta_clayton:.2f} | Lower Tail Dep.',
+                             fontsize=12, fontweight='bold')
+            else:
+                ax3.set_title('Clayton Copula\n(Not suitable for negative correlation)',
+                             fontsize=12, fontweight='bold')
+
+            ax3.set_xlabel(f'{var1} (Rank)', fontsize=10)
+            ax3.set_ylabel(f'{var2} (Rank)', fontsize=10)
+            ax3.grid(True, alpha=0.2)
+            ax3.set_xlim(0, 1)
+            ax3.set_ylim(0, 1)
+
+            # Subplot 4: Gumbel Copula (Upper tail dependence)
+            ax4 = axes[1, 1]
+            ax4.scatter(x_rank, y_rank, alpha=0.3, s=10, c='steelblue', edgecolors='none')
+            ax4.plot([0, 1], [0, 1], 'k--', linewidth=1.5, alpha=0.4)
+
+            # Gumbel copula parameter (approximate from Spearman)
+            if spearman_rho > 0:
+                theta_gumbel = 1 / (1 - spearman_rho)
+                theta_gumbel = max(1.0, theta_gumbel)  # Must be >= 1
+
+                # Gumbel copula density (simplified visualization)
+                # Higher density in upper-right corner (upper tail dependence)
+                Z_gumbel = np.exp(-((-np.log(U))**theta_gumbel + (-np.log(V))**theta_gumbel)**(1/theta_gumbel))
+                Z_gumbel = np.nan_to_num(Z_gumbel, nan=0, posinf=0, neginf=0).astype(float, copy=False)
+
+                ax4.contour(U, V, Z_gumbel, levels=8, colors='purple', alpha=0.6, linewidths=1.5)
+                ax4.set_title(f'Gumbel Copula\nθ={theta_gumbel:.2f} | Upper Tail Dep.',
+                             fontsize=12, fontweight='bold')
+            else:
+                ax4.set_title('Gumbel Copula\n(Not suitable for negative correlation)',
+                             fontsize=12, fontweight='bold')
+
+            ax4.set_xlabel(f'{var1} (Rank)', fontsize=10)
+            ax4.set_ylabel(f'{var2} (Rank)', fontsize=10)
+            ax4.grid(True, alpha=0.2)
+            ax4.set_xlim(0, 1)
+            ax4.set_ylim(0, 1)
+
+            fig.suptitle(f'Copula Family Comparison\n{var1} vs {var2} | Top Variable Pair',
+                        fontsize=16, fontweight='bold', y=0.995)
+
+            plt.tight_layout(rect=[0, 0, 1, 0.99])
+
+            # Save
+            filename = 'copula_family_comparison.png'
+            filepath = output_dir / filename
+            plt.savefig(filepath, dpi=300, bbox_inches='tight')
+            saved_figures.append(filepath)
+            logger.info(f"    Saved: {filename}")
+
+            plt.close()
+
+    logger.info(f"\n✓ Created {len(saved_figures)} fitted copula visualization(s)")
+    return saved_figures
+
+
+def create_team_consistency_plots(df: pd.DataFrame, prop_analysis: pd.DataFrame, output_dir: Path, teams_per_page: int = 1, players_per_plot: int = 8):
+    """
+    Create team-by-team consistency plots - ONE TEAM PER PAGE with all player names labeled.
+    Splits into multiple plots if a team has more players than players_per_plot.
 
     Args:
         df: Game-level data
         prop_analysis: Player consistency metrics
         output_dir: Directory to save figures
-        teams_per_page: Number of teams per figure
+        teams_per_page: Number of teams per figure (default 1 for clarity)
+        players_per_plot: Maximum players per individual plot before splitting
 
     Returns:
         List of figure file paths
@@ -3921,96 +4482,330 @@ def create_team_consistency_plots(df: pd.DataFrame, prop_analysis: pd.DataFrame,
     saved_figures = []
 
     # Get all teams
-    teams = sorted(df['player_team'].unique())
+    teams = sorted(df['player_team'].dropna().astype(str).unique())
     total_teams = len(teams)
-    total_pages = (total_teams + teams_per_page - 1) // teams_per_page
 
-    logger.info(f"\n>>> Creating {total_pages} figures for {total_teams} teams ({teams_per_page} teams per figure)")
+    logger.info(f"\n>>> Creating individual figures for {total_teams} teams (1 team per figure, max {players_per_plot} players per plot)")
 
-    for page_num in range(total_pages):
-        start_idx = page_num * teams_per_page
-        end_idx = min((page_num + 1) * teams_per_page, total_teams)
-        teams_on_page = teams[start_idx:end_idx]
+    for team_idx, team in enumerate(teams):
+        # Get team players
+        team_players = df[df['player_team'] == team]['player_name'].unique()
 
-        n_teams = len(teams_on_page)
-        fig, axes = plt.subplots(n_teams, 1, figsize=(14, 5 * n_teams))
+        # Get consistency data - get ALL players, not just top 15
+        team_consistency = prop_analysis[prop_analysis['player_name'].isin(team_players)]
+        team_consistency = team_consistency.sort_values('PPG', ascending=False)
 
-        if n_teams == 1:
-            axes = [axes]
+        if len(team_consistency) == 0:
+            logger.info(f"    {team}: No data available")
+            continue
 
-        logger.info(f"\n>>> Page {page_num + 1}/{total_pages}: Teams {start_idx + 1}-{end_idx}")
+        # Split into multiple plots if too many players
+        total_players = len(team_consistency)
+        n_plots = (total_players + players_per_plot - 1) // players_per_plot
 
-        for team_idx, team in enumerate(teams_on_page):
-            ax = axes[team_idx]
+        logger.info(f"\n>>> Team {team_idx + 1}/{total_teams}: {team} - {total_players} players in {n_plots} plot(s)")
 
-            # Get team players
-            team_players = df[df['player_team'] == team]['player_name'].unique()
+        for plot_idx in range(n_plots):
+            start_player = plot_idx * players_per_plot
+            end_player = min((plot_idx + 1) * players_per_plot, total_players)
+            plot_data = team_consistency.iloc[start_player:end_player]
 
-            # Get consistency data
-            team_consistency = prop_analysis[prop_analysis['player_name'].isin(team_players)]
-            team_consistency = team_consistency.sort_values('PPG', ascending=False).head(15)
-
-            if len(team_consistency) == 0:
-                ax.text(0.5, 0.5, f'No data for {team}', ha='center', va='center',
-                       transform=ax.transAxes, fontsize=12)
-                ax.set_title(team, fontweight='bold', fontsize=14)
-                continue
+            # Create figure for this batch
+            fig, ax = plt.subplots(figsize=(16, 10))
 
             # Create scatter plot: Consistency vs Performance
-            x = team_consistency['PPG'].values
-            y = team_consistency['PTS_CV'].values
+            x = plot_data['PPG'].values
+            y = plot_data['PTS_CV'].values
+            names = plot_data['player_name'].values
 
             # Color by consistency (green = consistent, red = inconsistent)
             colors = ['green' if cv < 0.40 else 'orange' if cv < 0.60 else 'red' for cv in y]
 
-            ax.scatter(x, y, s=150, c=colors, alpha=0.6, edgecolor='black', linewidth=1.5)
+            # Plot with larger markers
+            scatter = ax.scatter(x, y, s=200, c=colors, alpha=0.7, edgecolor='black', linewidth=2)
 
-            # Add player labels for top 5
-            for i in range(min(5, len(team_consistency))):
-                player = team_consistency.iloc[i]
-                ax.annotate(player['player_name'].split()[-1],  # Last name only
-                          (player['PPG'], player['PTS_CV']),
-                          xytext=(5, 5), textcoords='offset points',
-                          fontsize=9, fontweight='bold')
+            # Add ALL player labels with smart positioning to avoid overlap
+            texts = []
+            for i, (xi, yi, name) in enumerate(zip(x, y, names)):
+                # Use full name or last name based on length
+                display_name = name if len(name) < 20 else name.split()[-1]
+                texts.append(ax.annotate(
+                    display_name,
+                    (xi, yi),
+                    fontsize=9,
+                    fontweight='bold',
+                    ha='center',
+                    va='bottom'
+                ))
 
-            # Add consistency threshold line
+            # Try to use adjustText if available for better label placement
+            try:
+                from adjustText import adjust_text
+                adjust_text(texts, x=x, y=y, ax=ax,
+                           arrowprops=dict(arrowstyle='-', color='gray', alpha=0.5),
+                           expand_points=(1.5, 1.5),
+                           force_text=(0.5, 0.5))
+            except ImportError:
+                # Fallback: simple offset positioning if adjustText not installed
+                for i, txt in enumerate(texts):
+                    txt.set_position((x[i], y[i]))
+                    txt.xyann = (5, 5)
+                    txt.set_anncoords('offset points')
+
+            # Add consistency threshold lines
             ax.axhline(0.40, color='blue', linestyle='--', linewidth=2, alpha=0.7,
-                      label='Consistency threshold (CV=0.40)')
+                      label='Good consistency (CV=0.40)')
+            ax.axhline(0.60, color='orange', linestyle='--', linewidth=1.5, alpha=0.5,
+                      label='Moderate consistency (CV=0.60)')
 
-            ax.set_title(f'{team} - Player Consistency vs Performance\n'
-                        f'Top {len(team_consistency)} Players',
-                        fontweight='bold', fontsize=12)
-            ax.set_xlabel('Points Per Game (PPG)', fontsize=10, fontweight='bold')
-            ax.set_ylabel('Coefficient of Variation (CV)', fontsize=10, fontweight='bold')
-            ax.legend(fontsize=9)
+            # Title with plot number if multiple plots
+            if n_plots > 1:
+                title = f'{team} - Player Consistency vs Performance\n(Plot {plot_idx + 1}/{n_plots}: Players {start_player + 1}-{end_player} by PPG)'
+            else:
+                title = f'{team} - Player Consistency vs Performance\n({len(plot_data)} Players)'
+
+            ax.set_title(title, fontweight='bold', fontsize=14)
+            ax.set_xlabel('Points Per Game (PPG)', fontsize=12, fontweight='bold')
+            ax.set_ylabel('Coefficient of Variation (CV) - Lower = More Consistent', fontsize=12, fontweight='bold')
+            ax.legend(fontsize=10, loc='upper right')
             ax.grid(True, alpha=0.3, linestyle=':')
+
+            # Add color legend
+            from matplotlib.patches import Patch
+            legend_elements = [
+                Patch(facecolor='green', edgecolor='black', alpha=0.7, label='Consistent (CV < 0.40)'),
+                Patch(facecolor='orange', edgecolor='black', alpha=0.7, label='Moderate (0.40 ≤ CV < 0.60)'),
+                Patch(facecolor='red', edgecolor='black', alpha=0.7, label='Inconsistent (CV ≥ 0.60)')
+            ]
+            ax.legend(handles=legend_elements, loc='upper right', fontsize=9)
 
             # Annotate regions
             ax.text(0.98, 0.98, 'Inconsistent\nHigh-scorers', transform=ax.transAxes,
-                   ha='right', va='top', fontsize=8, style='italic',
+                   ha='right', va='top', fontsize=9, style='italic',
                    bbox=dict(boxstyle='round', facecolor='salmon', alpha=0.3))
             ax.text(0.98, 0.02, 'Consistent\nHigh-scorers', transform=ax.transAxes,
-                   ha='right', va='bottom', fontsize=8, style='italic',
+                   ha='right', va='bottom', fontsize=9, style='italic',
                    bbox=dict(boxstyle='round', facecolor='lightgreen', alpha=0.3))
 
-            logger.info(f"    {team}: {len(team_consistency)} players plotted")
+            plt.tight_layout()
 
-        fig.suptitle(f'Team Consistency Analysis - Page {page_num + 1}/{total_pages}',
-                    fontsize=16, fontweight='bold', y=0.995)
+            # Save with team name in filename
+            team_safe = team.replace(' ', '_').replace('/', '_')
+            if n_plots > 1:
+                filename = f'team_consistency_{team_safe}_part{plot_idx + 1}.png'
+            else:
+                filename = f'team_consistency_{team_safe}.png'
+            filepath = output_dir / filename
+            plt.savefig(filepath, dpi=300, bbox_inches='tight')
+            saved_figures.append(filepath)
+            logger.info(f"    Saved: {filename} ({len(plot_data)} players)")
 
-        plt.tight_layout(rect=[0, 0, 1, 0.99])
-
-        # Save
-        filename = f'team_consistency_page{page_num + 1}.png'
-        filepath = output_dir / filename
-        plt.savefig(filepath, dpi=300, bbox_inches='tight')
-        saved_figures.append(filepath)
-        logger.info(f"    Saved: {filename}")
-
-        plt.close()
+            plt.close()
 
     logger.info(f"\n✓ Created {len(saved_figures)} team consistency figures")
     return saved_figures
+
+
+class DetailedLogCapture:
+    """
+    Context manager to capture all log output and print statements for detailed log output.
+    """
+    def __init__(self, log_path: Path):
+        self.log_path = log_path
+        self.log_path.parent.mkdir(parents=True, exist_ok=True)
+        self.file = None
+        self.original_stdout = None
+        self.original_handlers = []
+
+    def __enter__(self):
+        import sys
+        import io
+        import logging
+
+        # Open log file
+        self.file = open(self.log_path, 'w', encoding='utf-8')
+
+        # Create a custom stream that writes to both console and file
+        class TeeStream:
+            def __init__(self, original, file):
+                self.original = original
+                self.file = file
+
+            def write(self, data):
+                self.original.write(data)
+                self.file.write(data)
+                self.file.flush()
+
+            def flush(self):
+                self.original.flush()
+                self.file.flush()
+
+        # Replace stdout
+        self.original_stdout = sys.stdout
+        sys.stdout = TeeStream(sys.stdout, self.file)
+
+        # Add file handler to root logger
+        file_handler = logging.FileHandler(self.log_path, mode='a', encoding='utf-8')
+        file_handler.setFormatter(logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S"
+        ))
+        logging.getLogger().addHandler(file_handler)
+        self.original_handlers.append(file_handler)
+
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        import sys
+        import logging
+
+        # Restore stdout
+        sys.stdout = self.original_stdout
+
+        # Remove file handler
+        for handler in self.original_handlers:
+            logging.getLogger().removeHandler(handler)
+            handler.close()
+
+        # Close file
+        if self.file:
+            self.file.close()
+
+
+def generate_detailed_log_pdf(output_dir: Path, log_file: Path, all_figures: list):
+    """
+    Generate a detailed PDF report containing the full log output with tables and all figures.
+
+    Args:
+        output_dir: Directory to save the PDF
+        log_file: Path to the log file containing all output
+        all_figures: List of all figure paths
+
+    Returns:
+        Path to generated detailed PDF
+    """
+    from datetime import datetime
+    from matplotlib.backends.backend_pdf import PdfPages
+    import matplotlib.image as mpimg
+
+    logger.info("\n" + "=" * 100)
+    logger.info("GENERATING DETAILED LOG PDF REPORT")
+    logger.info("=" * 100)
+
+    now = datetime.now()
+    pdf_filename = f"detailed_log_{now.strftime('%H-%M_%Y%m%d')}.pdf"
+    pdf_path = output_dir / pdf_filename
+
+    logger.info(f"\n>>> Creating detailed PDF: {pdf_filename}")
+
+    with PdfPages(pdf_path) as pdf:
+        # Title page
+        fig = plt.figure(figsize=(11, 8.5))
+        ax = fig.add_subplot(111)
+        ax.axis('off')
+
+        title_text = f"""
+NBA PLAYER STATISTICS
+DETAILED LOG REPORT
+
+2024-2025 Season
+
+Generated: {now.strftime('%Y-%m-%d %H:%M:%S')}
+
+This report contains:
+• Complete analysis log with all tables
+• All generated figures ({len(all_figures)} total)
+• Full statistical output
+
+For quick reference, see the standard PDF report.
+        """
+
+        ax.text(0.5, 0.5, title_text, ha='center', va='center',
+               fontsize=14, family='monospace',
+               bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=0.5))
+
+        pdf.savefig(fig, bbox_inches='tight')
+        plt.close()
+
+        # Add log content as text pages
+        if log_file and log_file.exists():
+            logger.info("    Adding log content...")
+            with open(log_file, 'r', encoding='utf-8') as f:
+                log_content = f.read()
+
+            # Split into pages (approximately 80 lines per page)
+            lines = log_content.split('\n')
+            lines_per_page = 60
+            num_pages = (len(lines) + lines_per_page - 1) // lines_per_page
+
+            for page_num in range(num_pages):
+                start_line = page_num * lines_per_page
+                end_line = min((page_num + 1) * lines_per_page, len(lines))
+                page_lines = lines[start_line:end_line]
+                page_text = '\n'.join(page_lines)
+
+                fig = plt.figure(figsize=(11, 8.5))
+                ax = fig.add_subplot(111)
+                ax.axis('off')
+
+                # Use monospace font for log content
+                ax.text(0.02, 0.98, page_text, ha='left', va='top',
+                       fontsize=6, family='monospace',
+                       transform=ax.transAxes,
+                       verticalalignment='top')
+
+                fig.text(0.5, 0.01, f'Log Page {page_num + 1}/{num_pages}',
+                        ha='center', fontsize=8, style='italic')
+
+                pdf.savefig(fig, bbox_inches='tight')
+                plt.close()
+
+                if (page_num + 1) % 20 == 0:
+                    logger.info(f"    Added {page_num + 1}/{num_pages} log pages...")
+
+            logger.info(f"    Added {num_pages} log pages")
+
+        # Add all figures
+        logger.info("    Adding figures...")
+        for idx, fig_path in enumerate(all_figures, 1):
+            if not fig_path.exists():
+                continue
+
+            try:
+                img = mpimg.imread(fig_path)
+                fig = plt.figure(figsize=(11, 8.5))
+                ax = fig.add_subplot(111)
+                ax.imshow(img)
+                ax.axis('off')
+
+                caption = fig_path.stem.replace('_', ' ').title()
+                fig.text(0.5, 0.02, f'Figure {idx}/{len(all_figures)}: {caption}',
+                        ha='center', fontsize=10, style='italic')
+
+                pdf.savefig(fig, bbox_inches='tight')
+                plt.close()
+
+                if idx % 20 == 0:
+                    logger.info(f"    Added {idx}/{len(all_figures)} figures...")
+
+            except Exception as e:
+                logger.warning(f"    Could not add figure {fig_path}: {e}")
+                continue
+
+        logger.info(f"    Added all {len(all_figures)} figures")
+
+        # Set PDF metadata
+        d = pdf.infodict()
+        d['Title'] = 'NBA Player Statistics - Detailed Log Report'
+        d['Author'] = 'NBA Analytics System'
+        d['Subject'] = '2024-2025 Season Detailed Analysis'
+        d['Keywords'] = 'NBA, Statistics, Analysis, Detailed Log'
+        d['CreationDate'] = now
+
+    logger.info(f"\n✓ Detailed PDF generated: {pdf_path}")
+    logger.info(f"    File size: {pdf_path.stat().st_size / 1024 / 1024:.2f} MB")
+
+    return pdf_path
 
 
 def generate_comprehensive_pdf(output_dir: Path, all_figures: list, log_file: Path = None):
@@ -4121,15 +4916,37 @@ All figures rounded to 2 decimal places
     return pdf_path
 
 
-def main():
-    """Main execution function."""
+def main(detailed_log: bool = True):
+    """
+    Main execution function.
+
+    Args:
+        detailed_log: If True, generates a detailed PDF with full log output and tables.
+                     Default is True.
+    """
+    from datetime import datetime
+
+    # Setup output directory early for log file
+    output_dir = Path("output/figures")
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Setup detailed log capture if enabled
+    log_file = None
+    log_capture = None
+    if detailed_log:
+        now = datetime.now()
+        log_file = output_dir / f"analysis_log_{now.strftime('%Y%m%d_%H%M%S')}.txt"
+        log_capture = DetailedLogCapture(log_file)
+        log_capture.__enter__()
+        logger.info(f">>> Detailed log capture enabled: {log_file}")
+
     logger.info("\n" + "=" * 100)
     logger.info("NBA PLAYER STATISTICS COMPREHENSIVE ANALYSIS")
-    logger.info("2024-2025 SEASON")
+    logger.info("2025-2026 SEASON (THROUGH FEB)")
     logger.info("=" * 100)
 
     # File path
-    data_file = Path("/Users/matthewraymondandrewgrant/PycharmProjects/nba_backtest/betbuilder_research/data/raw/PlayerStatistics_2024_2025.csv")
+    data_file = PROJECT_ROOT / "data/raw/PlayerStatistics_2025-2026_Feb.csv"
 
     # Step 1: Load and display raw data
     df_raw = load_and_display_raw_data(data_file)
@@ -4158,10 +4975,18 @@ def main():
     # Step 9: Prop bet opportunities
     prop_analysis = identify_prop_bet_opportunities(df_clean, player_agg)
 
+    # Initialize figures list (output_dir already created at start)
+    all_figures = []
+
     # Step 9a: Line Hit Rate Analysis
     # Analyzes success rates for props at different line positions (avg, avg±5, avg±10)
     # Shows % of games players go OVER each line - critical for line shopping
-    line_hit_rates = analyze_line_hit_rates(df_clean, prop_analysis)
+    line_hit_rates = analyze_line_hit_rates(df_clean, prop_analysis, output_dir)
+
+    # Add hit rate table figures to PDF
+    if 'figures' in line_hit_rates and len(line_hit_rates['figures']) > 0:
+        all_figures.extend(line_hit_rates['figures'])
+        logger.info(f">>> Added {len(line_hit_rates['figures'])} hit rate table figures to PDF")
 
     # Step 10: Accumulator backtesting - Date Range Simulation
     # Test your acca structure across all available dates
@@ -4177,7 +5002,7 @@ def main():
     # Step 11: Distribution Testing - Identify statistical distributions
     # Tests each variable against 8 distributions (Normal, Lognormal, Gamma, etc.)
     # Uses Kolmogorov-Smirnov, Anderson-Darling, Shapiro-Wilk, and Jarque-Bera tests
-    distribution_results = test_distributions(df_clean)
+    distribution_results = test_distributions(df_clean, output_dir=output_dir, plot=True)
 
     # Step 12: Advanced Dependency Analysis
     # Entropy, Mutual Information, and Copula analysis
@@ -4186,10 +5011,7 @@ def main():
 
     # Step 13: Create Enhanced Visualizations
     # Enhanced Seaborn distributions, copula plots, and team consistency plots
-    output_dir = Path("output/figures")
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    all_figures = []
+    # (output_dir and all_figures already created in Step 9a)
 
     # Create enhanced distribution plots (batched)
     dist_figures = create_enhanced_seaborn_distributions(df_clean, output_dir, batch_size=4)
@@ -4204,8 +5026,12 @@ def main():
         additional_copula_figures = create_additional_copula_plots(df_clean, copula_results, output_dir)
         all_figures.extend(additional_copula_figures)
 
-    # Create team consistency plots (batched by team)
-    team_figures = create_team_consistency_plots(df_clean, prop_analysis, output_dir, teams_per_page=3)
+        # Create fitted copula plots (Gaussian, Clayton, Gumbel copula families)
+        fitted_copula_figures = create_fitted_copula_plots(df_clean, copula_results, output_dir)
+        all_figures.extend(fitted_copula_figures)
+
+    # Create team consistency plots (one team per figure, split if > 8 players)
+    team_figures = create_team_consistency_plots(df_clean, prop_analysis, output_dir, players_per_plot=8)
     all_figures.extend(team_figures)
 
     # Step 14: Generate Comprehensive PDF Report
@@ -4252,20 +5078,43 @@ def main():
     logger.info("=" * 100)
 
     print(f"\n{'='*100}")
-    print("📄 COMPREHENSIVE PDF REPORT GENERATED")
+    print("PDF REPORTS GENERATED")
     print(f"{'='*100}")
-    print(f"\nPDF Location: {pdf_path}")
-    print(f"Total Figures: {len(all_figures)}")
-    print(f"File Size: {pdf_path.stat().st_size / 1024 / 1024:.2f} MB")
-    print(f"\nFilename Format: HH:MM:YYYYMMDD.pdf")
-    print(f"Generated: {pdf_path.name}")
+    print(f"\n1. Standard PDF: {pdf_path}")
+    print(f"   Figures: {len(all_figures)}")
+    print(f"   Size: {pdf_path.stat().st_size / 1024 / 1024:.2f} MB")
+
+    # Generate detailed log PDF if enabled
+    detailed_pdf_path = None
+    if detailed_log and log_file:
+        # Close log capture before generating detailed PDF
+        if log_capture:
+            log_capture.__exit__(None, None, None)
+
+        # Generate detailed PDF with log content
+        detailed_pdf_path = generate_detailed_log_pdf(output_dir, log_file, all_figures)
+
+        print(f"\n2. Detailed Log PDF: {detailed_pdf_path}")
+        print(f"   Contains: Full analysis log with tables + all figures")
+        print(f"   Size: {detailed_pdf_path.stat().st_size / 1024 / 1024:.2f} MB")
+        print(f"\n3. Raw Log File: {log_file}")
+
     print(f"{'='*100}\n")
 
-    return df_clean, player_agg, team_agg, prop_analysis, line_hit_rates, daily_results, all_props, distribution_results, entropy_results, mi_matrix, copula_results, pdf_path
+    return df_clean, player_agg, team_agg, prop_analysis, line_hit_rates, daily_results, all_props, distribution_results, entropy_results, mi_matrix, copula_results, pdf_path, detailed_pdf_path
 
 
 if __name__ == "__main__":
-    df_clean, player_agg, team_agg, prop_analysis, line_hit_rates, daily_results, all_props, distribution_results, entropy_results, mi_matrix, copula_results, pdf_path = main()
+    import argparse
+
+    parser = argparse.ArgumentParser(description='NBA Player Statistics Comprehensive Analysis')
+    parser.add_argument('--no-detailed-log', action='store_true',
+                       help='Disable detailed log PDF generation (default: enabled)')
+    args = parser.parse_args()
+
+    detailed_log = not args.no_detailed_log
+
+    df_clean, player_agg, team_agg, prop_analysis, line_hit_rates, daily_results, all_props, distribution_results, entropy_results, mi_matrix, copula_results, pdf_path, detailed_pdf_path = main(detailed_log=detailed_log)
 
     # Keep variables in scope for interactive use
     print("\n>>> DataFrames available for further analysis:")
@@ -4281,6 +5130,7 @@ if __name__ == "__main__":
     print("    - mi_matrix: Mutual information matrix")
     print("    - copula_results: Copula dependency analysis results")
     print("    - pdf_path: Path to generated PDF report")
+    print("    - detailed_pdf_path: Path to detailed log PDF (if enabled)")
 
     # Show how to run again
     print("\n" + "=" * 100)

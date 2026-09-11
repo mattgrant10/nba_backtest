@@ -14,7 +14,7 @@ You have actual NBA data ready to analyze! Run this now:
 python data/dataedits.py
 ```
 
-This will analyze your **PlayerStatistics_2024_2025.csv** file with:
+This will analyze your **PlayerStatistics_2025-2026_Feb.csv** file with:
 - 8,514 game records
 - 600+ players
 - Full 2024-2025 season stats
@@ -73,7 +73,7 @@ This will analyze your **PlayerStatistics_2024_2025.csv** file with:
 # Or directly
 python data/dataedits.py
 
-# What you need: ✅ PlayerStatistics_2024_2025.csv (already present)
+# What you need: ✅ PlayerStatistics_2025-2026_Feb.csv (already present)
 # Time: 2-3 minutes
 # Output: 4 DataFrames + 15 plots
 ```
@@ -118,7 +118,7 @@ python scripts/run_backtest.py --save-predictions --analyze --verbose
 betbuilder_research/
 ├── data/
 │   ├── raw/
-│   │   └── PlayerStatistics_2024_2025.csv ✅ (YOUR DATA)
+│   │   └── PlayerStatistics_2025-2026_Feb.csv ✅ (YOUR DATA)
 │   └── processed/  (output goes here)
 │
 ├── models_artifacts/  (trained models go here)
@@ -190,7 +190,7 @@ pwd
 # Should show: .../nba_backtest/betbuilder_research
 
 # Check data file exists
-ls -lh data/raw/PlayerStatistics_2024_2025.csv
+ls -lh data/raw/PlayerStatistics_2025-2026_Feb.csv
 ```
 
 **"Import errors"**

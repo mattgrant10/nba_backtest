@@ -14,9 +14,11 @@ DATA_DIR = PROJECT_ROOT / "data"
 RAW_DATA_DIR = DATA_DIR / "raw"
 PROCESSED_DATA_DIR = DATA_DIR / "processed"
 MODELS_DIR = PROJECT_ROOT / "models_artifacts"
+OUTPUT_DIR = PROCESSED_DATA_DIR
+FIGURES_DIR = PROJECT_ROOT / "output" / "figures"
 
 # Ensure directories exist
-for dir_path in [DATA_DIR, RAW_DATA_DIR, PROCESSED_DATA_DIR, MODELS_DIR]:
+for dir_path in [DATA_DIR, RAW_DATA_DIR, PROCESSED_DATA_DIR, MODELS_DIR, FIGURES_DIR]:
     dir_path.mkdir(parents=True, exist_ok=True)
 
 
@@ -62,10 +64,66 @@ class LoggingConfig:
     date_format: str = "%Y-%m-%d %H:%M:%S"
 
 
+@dataclass
+class MonteCarloConfig:
+    """Configuration for Monte Carlo simulation."""
+
+    n_simulations: int = 10000
+    random_state: int = 42
+    use_gpu: bool = True  # Use Apple Metal GPU via MLX if available
+    use_correlations: bool = True  # Apply correlation structure between stats
+    batch_size: int = 5000  # Batch size for GPU processing
+    confidence_levels: List[float] = field(
+        default_factory=lambda: [0.05, 0.10, 0.25, 0.50, 0.75, 0.90, 0.95]
+    )
+
+
+@dataclass
+class LineGeneratorConfig:
+    """
+    Configuration for learned line generator model.
+
+    Sample Size Thresholds:
+        - min_samples_train (500): Minimum to start training, but high variance
+        - min_samples_reliable (2000): Reasonable for cross-validation
+        - min_samples_per_stat (100): Per stat type minimum for reliable patterns
+        - Optimal: 5000+ samples for production-ready model
+    """
+
+    # Model type: "gradient_boosting" (default), "linear" (fallback for small samples)
+    model_type: str = "gradient_boosting"
+    random_state: int = 42
+
+    # Feature computation windows
+    rolling_windows: List[int] = field(default_factory=lambda: [5, 10, 20])
+
+    # Sample size thresholds
+    min_samples_train: int = 500       # Minimum to start training
+    min_samples_reliable: int = 2000   # Minimum for reliable simulation
+    min_samples_per_stat: int = 100    # Per stat type minimum
+
+    # Line rounding
+    rounding_increment: float = 0.5    # Standard betting line increment
+
+    # Stats to model
+    stat_cols: List[str] = field(default_factory=lambda: ["pts", "fg3m", "ast", "reb"])
+
+    # Gradient Boosting hyperparameters
+    n_estimators: int = 100
+    max_depth: int = 5
+    learning_rate: float = 0.1
+
+    # Default odds range (used when odds not learned)
+    default_odds_min: float = 1.85
+    default_odds_max: float = 1.95
+
+
 # Global configs
 backtest_config = BacktestConfig()
 model_config = ModelConfig()
 logging_config = LoggingConfig()
+monte_carlo_config = MonteCarloConfig()
+line_generator_config = LineGeneratorConfig()
 
 
 def setup_logging(

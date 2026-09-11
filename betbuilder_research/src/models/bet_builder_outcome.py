@@ -103,7 +103,7 @@ def train_builder_hit_model(
     metrics = {
         "accuracy": float(accuracy_score(y, preds)),
         "brier": float(brier_score_loss(y, probs)),
-        "log_loss": float(log_loss(y, probs, eps=1e-7)),
+        "log_loss": float(log_loss(y, np.clip(probs, 1e-7, 1 - 1e-7))),
         "roc_auc": float(roc_auc_score(y, probs)),
         "n_obs": int(len(y)),
         "n_features": len(feature_cols),
@@ -194,7 +194,7 @@ def evaluate_model(
     metrics = {
         "accuracy": float(accuracy_score(y, preds)),
         "brier": float(brier_score_loss(y, probs)),
-        "log_loss": float(log_loss(y, probs, eps=1e-7)),
+        "log_loss": float(log_loss(y, np.clip(probs, 1e-7, 1 - 1e-7))),
         "roc_auc": float(roc_auc_score(y, probs)),
         "n_obs": int(len(y)),
         "positive_rate": float(y.mean()),
